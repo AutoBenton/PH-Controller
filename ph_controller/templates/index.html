@@ -1,0 +1,726 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pH Controller</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" href="/static/css/theme.css?v=3">
+  <link rel="stylesheet" href="/static/css/simple-keyboard.css">
+  <link rel="stylesheet" href="/static/css/numpad.css?v=4">
+  <script src="/static/js/simple-keyboard.js"></script>
+  <script src="/static/js/numpad.js?v=4"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { overflow: hidden; width: 100%; height: 100%; }
+    body { font-family: "Courier New", monospace; background: var(--bg-page); color: var(--text-bright); }
+    #chart-bg canvas { display: block; }
+
+    /* ── Full-viewport chart ── */
+    #chart-bg { position: fixed; top: 0; right: 0; bottom: 0; left: 280px; z-index: 0; overflow: hidden; cursor: pointer; transition: left 0.22s ease; }
+    #chart-bg.expanded { left: 0; }
+
+    /* ── Floating control panel ── */
+    .left {
+      position: fixed; top: 0; left: 0; bottom: 0; width: 280px; z-index: 10;
+      background: var(--bg-panel-blur); backdrop-filter: blur(10px);
+      border-right: 1px solid var(--border);
+      padding: 20px 18px; display: flex; flex-direction: column; gap: 18px;
+      transition: transform 0.22s ease;
+    }
+    .left.hidden { transform: translateX(-280px); }
+
+    /* ── Bottom action bar ── */
+    .bottom-bar {
+      position: fixed; bottom: 0; right: 0; z-index: 20;
+      padding: 36px 14px 12px;
+      background: linear-gradient(to bottom, transparent, var(--bg-page-fade) 55%);
+      display: flex; gap: 8px; align-items: flex-end;
+      pointer-events: none;
+    }
+    .action-btn {
+      pointer-events: all;
+      background: var(--bg-panel-blur); border: 1px solid var(--border); color: var(--text-muted);
+      padding: 7px 13px; border-radius: 4px; cursor: pointer;
+      font-family: "Courier New", monospace; font-size: 0.85rem;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .action-btn:hover        { background: var(--btn-run);    border-color: var(--btn-run);    color: #fff; }
+    .action-btn.folder:hover { background: var(--blue-action); border-color: var(--blue-action); color: #fff; }
+    .action-btn:active       { transform: scale(0.96); }
+
+    /* ── Left panel internals ── */
+    .rule    { border: none; border-top: 1px solid var(--border-faint); }
+    .top-row { display: flex; align-items: flex-start; justify-content: space-between; }
+
+    .ph-block .lbl { font-size: 0.95rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 2px; }
+    .ph-block .big { font-size: 4.8rem; font-weight: 700; color: var(--chart-ph); line-height: 1; letter-spacing: -2px; }
+
+    .cfg-link { color: var(--text-muted); font-size: 1.2rem; text-decoration: none; padding: 5px 7px; line-height: 1; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-element); transition: color 0.1s, border-color 0.1s, background 0.1s; }
+    .cfg-link:hover { color: var(--text-bright); border-color: var(--text-dim); background: var(--bg-hover); }
+
+    .sec-lbl   { font-size: 0.95rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+    .target-row { display: flex; align-items: center; gap: 10px; }
+    /* Rendered as an <input> so the value can be typed, but styled to look
+       exactly like the plain text it replaced -- the custom .spin-btn pair
+       below stays the only visible stepper. */
+    .target-val { font-size: 2.2rem; color: var(--chart-target); min-width: 56px;
+                  width: 90px; background: transparent; border: none; padding: 0;
+                  font-family: inherit; -moz-appearance: textfield; }
+    .target-val::-webkit-outer-spin-button,
+    .target-val::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .target-val:focus { outline: none; border-bottom: 2px solid var(--blue, #58a6ff); }
+
+    .spin-col { display: flex; flex-direction: column; gap: 4px; }
+    .spin-btn { width: 36px; height: 30px; background: var(--bg-element); border: 1px solid var(--border); color: var(--text-body); border-radius: 4px; cursor: pointer; font-size: 0.9rem; transition: background 0.1s, border-color 0.1s, box-shadow 0.1s; }
+    .spin-btn:hover { background: var(--bg-hover); border-color: var(--blue); box-shadow: 0 0 6px var(--blue-glow); }
+
+    .pump-row  { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+    .pump-name { font-size: 0.95rem; color: var(--text-muted); }
+    .pump-badge        { font-size: 0.95rem; font-weight: 700; padding: 2px 9px; border-radius: 10px; text-transform: capitalize; }
+    .pump-badge.idle   { background: var(--bg-element); color: var(--text-dim); }
+    .pump-badge.dosing { background: var(--bg-dosing);  color: var(--color-running); }
+
+    /* ── Pumps sub-link ── */
+    .pumps-link { color: var(--text-muted); font-size: 0.9rem; text-decoration: none; border: 1px solid var(--border); padding: 8px 14px; border-radius: 6px; background: var(--bg-element); transition: color 0.1s, background 0.1s, border-color 0.1s; }
+    .pumps-link:hover  { color: var(--text-bright); background: var(--bg-hover); border-color: var(--text-dim); }
+
+    /* ── Status + control zone ── */
+    .ctrl-zone {
+      margin-top: auto;
+      border-radius: 10px;
+      padding: 16px 12px 14px;
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+      transition: background 0.35s ease, box-shadow 0.35s ease;
+    }
+    .ctrl-zone.running { background: var(--color-running-bg,  #162e1c); border: 1px solid var(--color-running-ring, #2a5c35); }
+    .ctrl-zone.paused  { background: var(--color-paused-bg,   #2b2008); border: 1px solid var(--color-paused-ring,  #5c4510); }
+    .ctrl-zone.stopped { background: transparent;                        border: 1px solid var(--border-faint,        #21262d); }
+
+    .status-lbl         { font-size: 1.6rem; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; line-height: 1; }
+    .status-lbl.running { color: var(--color-running,  #56d364); }
+    .status-lbl.paused  { color: var(--color-paused,   #e3b341); }
+    .status-lbl.stopped { color: var(--text-disabled,  #484f58); }
+
+    .ctrl-btns { display: flex; gap: 18px; }
+    .ctrl-btn  { width: 64px; height: 64px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; font-size: 1.5rem; transition: filter 0.1s, transform 0.08s, box-shadow 0.1s; }
+    .ctrl-btn:hover  { filter: brightness(1.25); }
+    .ctrl-btn:active { transform: scale(0.93); }
+    #btn-pp   { background: var(--btn-run,  #238636); color: #fff; border-color: var(--btn-run,  #238636); box-shadow: 0 0 0 2px var(--btn-run,  #238636), 0 0 20px var(--btn-run-glow,  rgba(35,134,54,0.53)); }
+    #btn-stop { background: var(--btn-stop, #da3633); color: #fff; border-color: var(--btn-stop, #da3633); box-shadow: 0 0 0 2px var(--btn-stop, #da3633), 0 0 20px var(--btn-stop-glow, rgba(218,54,51,0.53)); }
+    #btn-stop:disabled { background: var(--bg-element, #21262d); border-color: var(--border, #30363d); color: var(--text-disabled, #484f58); box-shadow: none; cursor: not-allowed; filter: none; }
+
+    /* ── On-screen keyboard ── */
+    #kb-wrap {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 600;
+      background: var(--bg-panel, #161b22); border-top: 1px solid var(--border, #30363d);
+      padding: 10px 12px 16px; box-shadow: 0 -6px 30px rgba(0,0,0,0.6);
+    }
+    #kb-wrap.show { display: block; }
+    .model-overlay.kb-open { align-items: flex-start; padding-top: 16px; }
+    .simple-keyboard.hg-theme-default { background: transparent; padding: 0; border: none; }
+    .hg-button { background: var(--bg-element,#21262d) !important; border-bottom: 3px solid var(--bg-hover,#30363d) !important; color: var(--text-bright,#e6edf3) !important; border-radius: 6px !important; box-shadow: none !important; height: 46px !important; font-family: "Courier New",monospace !important; font-size: 1rem !important; }
+    .hg-button:active { background: var(--blue,#58a6ff) !important; color: #fff !important; }
+    .hg-button[data-skbtn="{bksp}"]  { background: #2d1b00 !important; color: var(--color-paused,#e3b341) !important; border-bottom-color: #5c3a00 !important; }
+    .hg-button[data-skbtn="{shift}"] { background: var(--bg-hover,#30363d) !important; }
+    .hg-button[data-skbtn="{space}"] { flex-grow: 3 !important; }
+
+    /* ── Modal overlay ── */
+    .model-overlay { display: none; position: fixed; inset: 0; z-index: 500; background: var(--bg-overlay); align-items: center; justify-content: center; }
+    .model-overlay.show { display: flex; }
+    .model-card   { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px; padding: 24px; min-width: 340px; display: flex; flex-direction: column; gap: 14px; }
+    .model-title  { font-size: 1.1rem; font-weight: 700; color: var(--text-bright); }
+    .model-hint   { font-size: 0.85rem; color: var(--text-muted); line-height: 1.4; }
+    .model-input  { width: 100%; background: var(--bg-page); border: 1px solid var(--border); color: var(--text-body); padding: 8px 10px; border-radius: 4px; font-family: "Courier New", monospace; font-size: 1rem; }
+    .model-input:focus { outline: none; border-color: var(--blue); }
+    .model-btns   { display: flex; gap: 8px; justify-content: flex-end; }
+    .model-btn    { padding: 7px 18px; border: none; border-radius: 4px; cursor: pointer; font-family: "Courier New", monospace; font-size: 0.95rem; font-weight: 700; }
+    .model-btn.primary        { background: var(--btn-run); color: #fff; }
+    .model-btn.primary:hover  { filter: brightness(1.15); }
+    .model-btn.secondary      { background: var(--bg-element); border: 1px solid var(--border); color: var(--text-bright); }
+    .model-btn.secondary:hover{ background: var(--bg-hover); }
+
+    /* ── Session browser rows ── */
+    .session-row     { display: flex; flex-direction: column; padding: 8px 10px; background: var(--bg-page); border: 1px solid var(--border-faint); border-radius: 4px; gap: 6px; }
+    .session-row-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .session-info    { flex: 1; min-width: 0; }
+    .session-preview { display: block; border-radius: 3px; background: #0d1117; }
+    .session-name    { font-size: 0.78rem; color: var(--text-bright); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .session-meta    { font-size: 0.68rem; color: var(--text-muted); margin-top: 2px; }
+    .session-actions { display: flex; gap: 6px; flex-shrink: 0; }
+    .session-dl-btn  { padding: 5px 12px; background: var(--bg-element); border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; font-family: "Courier New", monospace; font-size: 0.72rem; text-decoration: none; white-space: nowrap; transition: background 0.1s, border-color 0.1s, color 0.1s; }
+    .session-dl-btn:hover  { background: var(--blue-action); border-color: var(--blue-action); color: #fff; }
+    .session-del-btn { padding: 5px 10px; background: var(--bg-element); border: 1px solid var(--border); color: var(--text-muted); border-radius: 4px; font-family: "Courier New", monospace; font-size: 0.72rem; cursor: pointer; white-space: nowrap; transition: background 0.1s, border-color 0.1s, color 0.1s; }
+    .session-del-btn:hover { background: var(--btn-stop); border-color: var(--btn-stop); color: #fff; }
+    .session-status { font-size: 0.8rem; color: var(--text-muted); }
+    .session-error  { font-size: 0.8rem; color: var(--color-stopped); }
+  </style>
+</head>
+<body>
+
+<!-- ── Full-viewport chart ── -->
+<div id="chart-bg" onclick="togglePanel()">
+  <canvas id="chart"></canvas>
+</div>
+
+<!-- ── Floating control panel ── -->
+<div class="left" id="ctrl-panel">
+
+  <div class="top-row">
+    <div class="ph-block">
+      <div class="lbl">Current pH</div>
+      <div class="big" id="ph-val">-.-</div>
+    </div>
+    <a href="/config" class="cfg-link" title="Settings">&#9881;</a>
+  </div>
+
+  <hr class="rule">
+
+  <div>
+    <div class="sec-lbl">Target pH</div>
+    <div class="target-row">
+      <input class="target-val" id="target-val" type="number"
+             min="0" max="14" step="0.1" inputmode="decimal" aria-label="Target pH">
+      <div class="spin-col">
+        <button class="spin-btn" onclick="adjustTarget(0.1)">&#9650;</button>
+        <button class="spin-btn" onclick="adjustTarget(-0.1)">&#9660;</button>
+      </div>
+    </div>
+  </div>
+
+  <hr class="rule">
+
+  <div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <span class="sec-lbl" style="margin-bottom:0">Pumps</span>
+        <a href="/pumps" title="Pump Control" class="pumps-link">&#9881; Control</a>
+      </div>
+    <div class="pump-row">
+      <span class="pump-name">Pump 1 &mdash; acid</span>
+      <span class="pump-badge idle" id="p1-badge">idle</span>
+    </div>
+    <div class="pump-row">
+      <span class="pump-name">Pump 2 &mdash; base</span>
+      <span class="pump-badge idle" id="p2-badge">idle</span>
+    </div>
+  </div>
+
+  <div class="ctrl-zone stopped" id="ctrl-zone">
+    <span class="status-lbl stopped" id="status-lbl">Stopped</span>
+    <div class="ctrl-btns">
+      <button class="ctrl-btn" id="btn-pp"   onclick="togglePlay()" title="Start / Pause">&#9654;</button>
+      <button class="ctrl-btn" id="btn-stop" onclick="doStop()"     title="Stop">&#9632;</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Bottom action bar ── -->
+<div class="bottom-bar">
+  <button class="action-btn folder" onclick="openSessions()" title="Browse saved sessions"><i class="fa fa-folder-open"></i> Sessions</button>
+  <button class="action-btn"        onclick="saveData()"     title="Download current session as CSV"><i class="fa fa-save"></i> Save Session</button>
+</div>
+
+<script>
+let state = { status: "stopped", target_ph: 7.0, current_ph: null, history: [] };
+let chart = null;
+let panelVisible = true;
+
+// ── Chart ────────────────────────────────────────────────────────
+function initChart() {
+  const ctx = document.getElementById("chart").getContext("2d");
+  const cs  = getComputedStyle(document.documentElement);
+  const cv  = n => cs.getPropertyValue(n).trim();
+  const gc  = cv("--chart-grid") || "#21262d";
+  const tc  = cv("--text-muted") || "#8b949e";
+  const cPH     = cv("--chart-ph")     || "#58a6ff";
+  const cTarget = cv("--chart-target") || "#e3b341";
+  const cAcid   = cv("--chart-acid")   || "#f85149";
+  const cBase   = cv("--chart-base")   || "#56d364";
+  chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      datasets: [
+        { label: "pH",        data: [], borderColor: cPH,     backgroundColor: cPH + "12", yAxisID: "yPH", tension: 0.35, pointRadius: 2, fill: true,  borderWidth: 2 },
+        { label: "Target pH", data: [], borderColor: cTarget,                               yAxisID: "yPH", tension: 0.1,  pointRadius: 0, fill: false, borderWidth: 2, borderDash: [6,4] },
+        { label: "Acid (mL)", data: [], borderColor: cAcid,                                 yAxisID: "yML", tension: 0.1,  pointRadius: 0, borderWidth: 2, borderDash: [5,3] },
+        { label: "Base (mL)", data: [], borderColor: cBase,                                 yAxisID: "yML", tension: 0.1,  pointRadius: 0, borderWidth: 2, borderDash: [5,3] },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: true,
+      interaction: { mode: "index", intersect: false },
+      plugins: { legend: { labels: { color: tc, font: { family: "Courier New", size: 11 }, boxWidth: 18, padding: 14 } } },
+      scales: {
+        x:   { type: "linear", title: { display: true, text: "Time (min)", color: tc, font: { size: 11 } }, ticks: { color: tc }, grid: { color: gc } },
+        yPH: { type: "linear", position: "left",  min: 0, max: 14, title: { display: true, text: "pH",          color: cPH,       font: { size: 11 } }, ticks: { color: tc }, grid: { color: gc } },
+        yML: { type: "linear", position: "right", min: 0, title: { display: true, text: "Volume (mL)", color: tc, font: { size: 11 } }, ticks: { color: tc }, grid: { drawOnChartArea: false } },
+      },
+    },
+  });
+}
+
+// ── UI update ────────────────────────────────────────────────────
+function updateUI(d) {
+  document.getElementById("ph-val").textContent =
+    d.current_ph != null ? d.current_ph.toFixed(3) : "-.-";
+  // Don't clobber the field while it is being edited -- this runs every 2 s and
+  // would otherwise wipe a half-typed value out from under the user.
+  const tEl = document.getElementById("target-val");
+  if (document.activeElement !== tEl) tEl.value = Number(d.target_ph).toFixed(1);
+  setBadge("p1-badge", d.pump1_state);
+  setBadge("p2-badge", d.pump2_state);
+
+  const zone = document.getElementById("ctrl-zone");
+  const lbl  = document.getElementById("status-lbl");
+  zone.className = "ctrl-zone " + d.status;
+  lbl.className  = "status-lbl " + d.status;
+  lbl.textContent = d.status === "running" ? "Dosing" : d.status.charAt(0).toUpperCase() + d.status.slice(1);
+
+  const pp = document.getElementById("btn-pp");
+  pp.innerHTML = d.status === "running" ? "&#9646;&#9646;" : "&#9654;";
+  pp.title     = d.status === "running" ? "Pause" : "Start";
+  document.getElementById("btn-stop").disabled = d.status === "stopped";
+
+  if (d.history && d.history.length) {
+    const maxVol = d.history.reduce((m, e) => Math.max(m, e.pump1_ml, e.pump2_ml), 0);
+    if (maxVol > 0) chart.options.scales.yML.max = Math.ceil(maxVol * 1.1);
+    chart.data.datasets[0].data = d.history.map(e => ({ x: e.t_min, y: e.ph }));
+    chart.data.datasets[1].data = d.history.map(e => ({ x: e.t_min, y: e.target_ph }));
+    chart.data.datasets[2].data = d.history.map(e => ({ x: e.t_min, y: e.pump1_ml }));
+    chart.data.datasets[3].data = d.history.map(e => ({ x: e.t_min, y: e.pump2_ml }));
+    chart.update("none");
+  }
+}
+
+function setBadge(id, st) {
+  const el = document.getElementById(id);
+  el.textContent = st;
+  el.className = "pump-badge " + (st === "dosing" ? "dosing" : "idle");
+}
+
+// ── API ──────────────────────────────────────────────────────────
+async function fetchStatus() {
+  try {
+    const r = await fetch("/api/status");
+    if (!r.ok) throw new Error(r.status);
+    state = await r.json();
+    updateUI(state);
+  } catch(e) { console.error("fetchStatus:", e); }
+}
+
+async function post(url) {
+  try { await fetch(url, { method: "POST" }); await fetchStatus(); }
+  catch(e) { console.error(url, e); }
+}
+
+async function postTarget(ph) {
+  try {
+    await fetch("/api/target", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({ target_ph: ph }) });
+    await fetchStatus();
+  } catch(e) { console.error("postTarget:", e); }
+}
+
+async function adjustTarget(delta) {
+  const next = Math.round((state.target_ph + delta) * 10) / 10;
+  if (next < 0 || next > 14) return;
+  await postTarget(next);
+}
+
+// Typed entry. Fires for both the physical keyboard (native change on
+// Enter/blur) and the on-screen numpad, which dispatches the same event.
+async function commitTarget(el) {
+  const v = parseFloat(el.value);
+  if (isNaN(v)) {                       // unusable entry -- snap back
+    el.value = Number(state.target_ph).toFixed(1);
+    return;
+  }
+  const next = Math.min(14, Math.max(0, Math.round(v * 10) / 10));
+  el.value = next.toFixed(1);
+  if (next === state.target_ph) return;  // nothing changed, skip the POST
+  await postTarget(next);
+}
+
+function togglePlay() {
+  if (state.status === "running") {
+    post("/api/pump/pause");
+  } else if (state.status === "paused") {
+    post("/api/pump/start"); // resume — skip naming
+  } else {
+    openNameSession();       // stopped — prompt for name first
+  }
+}
+
+let _stopAfterSave = false;
+
+function doStop() {
+  if (state.status === "stopped") return;
+  document.getElementById("stop-confirm").classList.add("show");
+}
+function closeStopConfirm() {
+  document.getElementById("stop-confirm").classList.remove("show");
+}
+async function stopAndSave() {
+  closeStopConfirm();
+  _stopAfterSave = true;
+  saveData();
+}
+async function stopNow() {
+  closeStopConfirm();
+  await post("/api/pump/stop");
+}
+
+// ── Panel toggle ─────────────────────────────────────────────────
+function togglePanel() {
+  panelVisible = !panelVisible;
+  document.getElementById("ctrl-panel").classList.toggle("hidden", !panelVisible);
+  document.getElementById("chart-bg").classList.toggle("expanded", !panelVisible);
+  setTimeout(resizeChart, 230);
+}
+
+// ── Save session model ───────────────────────────────────────────
+function saveData() {
+  const hist = state.history || [];
+  if (hist.length === 0) {
+    alert("No session data to save.\nStart the controller to begin recording.");
+    return;
+  }
+  const input = document.getElementById("save-filename");
+  if (state.session_file) {
+    input.value = state.session_file.replace(/\.csv$/, "");
+  } else {
+    const ts = new Date().toISOString().slice(0, 19).replace("T", "_").replace(/:/g, "-");
+    input.value = `ph_session_${ts}`;
+  }
+  document.getElementById("save-model").classList.add("show");
+  setTimeout(function() { input.select(); showKb(input); }, 80);
+}
+
+function closeSaveModal() {
+  hideKb();
+  document.getElementById("save-model").classList.remove("show");
+}
+
+async function confirmSave() {
+  const hist = state.history || [];
+  const raw  = document.getElementById("save-filename").value.trim() || "ph_session";
+  const name = raw.endsWith(".csv") ? raw : raw + ".csv";
+
+  const lines = ["time,elapsed_min,ph,target_ph,pump1_acid_ml,pump2_base_ml"];
+  for (const e of hist) {
+    lines.push(`${e.time},${e.t_min},${e.ph},${e.target_ph},${e.pump1_ml},${e.pump2_ml}`);
+  }
+  const csv = lines.join("\n");
+  closeSaveModal();
+  const shouldStop = _stopAfterSave;
+  _stopAfterSave = false;
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle   = await window.showSaveFilePicker({
+        suggestedName: name,
+        types: [{ description: "CSV file", accept: { "text/csv": [".csv"] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(csv);
+      await writable.close();
+      if (shouldStop) await post("/api/pump/stop");
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+    }
+  }
+
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url  = URL.createObjectURL(blob);
+  const tag  = document.createElement("a");
+  tag.href = url; tag.download = name;
+  document.body.appendChild(tag);
+  tag.click();
+  document.body.removeChild(tag);
+  URL.revokeObjectURL(url);
+  if (shouldStop) await post("/api/pump/stop");
+}
+
+// ── Resize ───────────────────────────────────────────────────────
+function resizeChart() {
+  if (!chart) return;
+  const bg = document.getElementById("chart-bg");
+  const w = bg.clientWidth, h = bg.clientHeight;
+  const canvas = document.getElementById("chart");
+  canvas.style.width  = w + "px";
+  canvas.style.height = h + "px";
+  chart.resize(w, h);
+}
+
+// ── Session naming ───────────────────────────────────────────────
+function openNameSession() {
+  const ts = new Date().toISOString().slice(0, 10);
+  const input = document.getElementById("session-name-input");
+  input.value = `Session_${ts}`;
+  document.getElementById("name-session-model").classList.add("show");
+  setTimeout(function() { input.select(); showKb(input); }, 80);
+}
+
+function closeNameSession() {
+  hideKb();
+  document.getElementById("name-session-model").classList.remove("show");
+}
+
+async function startSession(useName) {
+  const name = useName ? document.getElementById("session-name-input").value.trim() : "";
+  closeNameSession();
+  try {
+    await fetch("/api/pump/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    await fetchStatus();
+  } catch(e) { console.error("startSession:", e); }
+}
+
+// ── Sessions browser ─────────────────────────────────────────────
+async function deleteSession(name) {
+  if (!confirm(`Delete "${name}"?`)) return;
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(name)}`, { method: "DELETE" });
+    if (!r.ok) throw new Error(r.status);
+    const row = document.getElementById("row-" + encodeURIComponent(name));
+    if (row) row.remove();
+  } catch(e) { alert("Failed to delete session."); }
+}
+
+async function downloadSession(name) {
+  try {
+    const r    = await fetch(`/api/sessions/${encodeURIComponent(name)}`);
+    const text = await r.text();
+    const blob = new Blob([text], { type: "text/csv" });
+    if (window.showSaveFilePicker) {
+      try {
+        const handle   = await window.showSaveFilePicker({
+          suggestedName: name,
+          types: [{ description: "CSV file", accept: { "text/csv": [".csv"] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch(e) { if (e.name === "AbortError") return; }
+    }
+    const url = URL.createObjectURL(blob);
+    const tag = document.createElement("a");
+    tag.href = url; tag.download = name;
+    document.body.appendChild(tag); tag.click();
+    setTimeout(() => { URL.revokeObjectURL(url); tag.remove(); }, 1000);
+  } catch(e) { alert("Download failed."); }
+}
+
+function buildSparkline(phVals, targetVals) {
+  const w = 360, h = 36, pad = 3;
+  if (!phVals || !phVals.length) return "";
+  function toY(v) { return (h - pad - ((Math.max(0, Math.min(14, v))) / 14) * (h - 2 * pad)).toFixed(1); }
+  function toX(i) { return (pad + (i / (Math.max(phVals.length - 1, 1))) * (w - 2 * pad)).toFixed(1); }
+  let svg = "";
+  if (targetVals && targetVals.length) {
+    const tMean = targetVals.reduce((a, b) => a + b, 0) / targetVals.length;
+    const ty = toY(tMean);
+    svg += `<line x1="${pad}" y1="${ty}" x2="${w - pad}" y2="${ty}" stroke="#e3b341" stroke-width="1" stroke-dasharray="3,2" opacity="0.7"/>`;
+  }
+  const pts = phVals.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
+  svg += `<polyline points="${pts}" fill="none" stroke="#58a6ff" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+  return svg;
+}
+
+async function loadSessionPreview(f) {
+  const enc   = encodeURIComponent(f.name);
+  const svgEl = document.getElementById(`preview-${enc}`);
+  if (!svgEl) return;
+  try {
+    const r = await fetch(`/api/sessions/${enc}/preview`);
+    const d = await r.json();
+    if (d.ph && d.ph.length) svgEl.innerHTML = buildSparkline(d.ph, d.target);
+  } catch(e) {}
+}
+
+function closeSessions() {
+  document.getElementById("sessions-model").classList.remove("show");
+}
+
+async function openSessions() {
+  const list = document.getElementById("sessions-list");
+  list.innerHTML = '<div class="session-status">Loading…</div>';
+  document.getElementById("sessions-model").classList.add("show");
+  try {
+    const r = await fetch("/api/sessions");
+    const files = await r.json();
+    if (!files.length) {
+      list.innerHTML = '<div class="session-status">No sessions found.</div>';
+      return;
+    }
+    list.innerHTML = files.map(f => {
+      const date = new Date(f.modified * 1000).toLocaleString();
+      const enc  = encodeURIComponent(f.name);
+      return `<div id="row-${enc}" class="session-row">
+        <div class="session-row-top">
+          <div class="session-info">
+            <div class="session-name">${f.name}</div>
+            <div class="session-meta">${date} &nbsp;&middot;&nbsp; ${f.size_kb} KB</div>
+          </div>
+          <div class="session-actions">
+            <button onclick="downloadSession('${f.name}')" class="session-dl-btn" title="Save to file"><i class="fa fa-download"></i> Download</button>
+            <button onclick="deleteSession('${f.name}')" class="session-del-btn">&times;</button>
+          </div>
+        </div>
+        <svg id="preview-${enc}" class="session-preview" viewBox="0 0 360 36" preserveAspectRatio="none" width="100%" height="36"></svg>
+      </div>`;
+    }).join("");
+    files.forEach(f => loadSessionPreview(f));
+  } catch(e) {
+    list.innerHTML = '<div class="session-error">Failed to load sessions.</div>';
+  }
+}
+
+// ── Init ─────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  initChart();
+  resizeChart();
+
+  // three layers: event, ResizeObserver on root, polling fallback
+  window.addEventListener("resize", resizeChart);
+  new ResizeObserver(resizeChart).observe(document.getElementById("chart-bg"));
+  setInterval(() => {
+    const bg = document.getElementById("chart-bg");
+    if (chart && bg && (chart.width !== bg.clientWidth || chart.height !== bg.clientHeight))
+      resizeChart();
+  }, 200);
+
+  fetchStatus();
+  setInterval(fetchStatus, 2000);
+  initKeyboard();
+
+  // Target pH: typable by physical keyboard, and by on-screen numpad on the
+  // touchscreen kiosk. Both funnel through the same "change" event.
+  const tEl = document.getElementById("target-val");
+  attachNumpad("#target-val");
+  tEl.addEventListener("change", (e) => commitTarget(e.target));
+});
+// __ On-screen keyboard ______________________________________________
+let keyboard = null;
+let kbTarget  = null;
+
+function initKeyboard() {
+  try {
+    var KB = typeof SimpleKeyboard === "function" ? SimpleKeyboard : SimpleKeyboard.default;
+    keyboard = new KB({
+      onChange: function(val) { if (kbTarget) kbTarget.value = val; },
+      onKeyPress: function(btn) {
+        if (btn === "{shift}" || btn === "{lock}") {
+          keyboard.setOptions({ layoutName: keyboard.options.layoutName === "default" ? "shift" : "default" });
+          return;
+        }
+      },
+      layout: {
+        default: ["1 2 3 4 5 6 7 8 9 0 {bksp}", "q w e r t y u i o p", "a s d f g h j k l", "{shift} z x c v b n m - _", "{space}"],
+        shift:   ["! @ # $ % & * ( ) {bksp}",   "Q W E R T Y U I O P", "A S D F G H J K L", "{shift} Z X C V B N M - _", "{space}"]
+      },
+      display: { "{bksp}": "⌫", "{shift}": "⇧", "{space}": "Space" },
+      theme: "hg-theme-default",
+      preventMouseDownDefault: true
+    });
+    console.log("[KB] ready");
+  } catch(e) { console.error("[KB] init failed:", e); }
+}
+
+function showKb(inputEl) {
+  if (!keyboard) return;
+  kbTarget = inputEl;
+  keyboard.setInput(inputEl.value || "");
+  keyboard.setOptions({ layoutName: "default" });
+  document.getElementById("kb-wrap").classList.add("show");
+  document.querySelectorAll(".model-overlay.show").forEach(function(o) { o.classList.add("kb-open"); });
+}
+
+function hideKb() {
+  if (!keyboard) return;
+  document.getElementById("kb-wrap").classList.remove("show");
+  document.querySelectorAll(".model-overlay").forEach(function(o) { o.classList.remove("kb-open"); });
+  kbTarget = null;
+}
+
+</script>
+
+<!-- ── Save session model ── -->
+<div class="model-overlay" id="save-model" onclick="if(event.target===this) closeSaveModal()">
+  <div class="model-card">
+    <div class="model-title"><i class="fa fa-save"></i> Save Session</div>
+    <div class="model-hint">
+      Name your file, then choose where to save it.<br>
+      To save to a USB drive, navigate to it in the system dialog.
+    </div>
+    <input class="model-input" id="save-filename" type="text"
+           placeholder="e.g. Tank_A_Day3"
+           onkeydown="if(event.key==='Enter') confirmSave(); if(event.key==='Escape') closeSaveModal()">
+    <div class="model-btns">
+      <button class="model-btn secondary" onclick="closeSaveModal()">Cancel</button>
+      <button class="model-btn primary"   onclick="confirmSave()">Save&#8230;</button>
+    </div>
+  </div>
+</div>
+<!-- ── Name session ── -->
+<div class="model-overlay" id="name-session-model" onclick="if(event.target===this) closeNameSession()">
+  <div class="model-card" style="max-width:380px">
+    <div class="model-title">&#9654; Name this Session</div>
+    <div class="model-hint">Give this session a label to help identify the data later. Leave it or change it — the timestamp is always appended to the filename.</div>
+    <input class="model-input" id="session-name-input" type="text" placeholder="e.g. Tank_A_Day3"
+           onkeydown="if(event.key==='Enter') startSession(true); if(event.key==='Escape') closeNameSession()">
+    <div class="model-btns" style="justify-content:space-between">
+      <button class="model-btn secondary" onclick="closeNameSession()">Cancel</button>
+      <button class="model-btn primary"   onclick="startSession(true)">&#9654; Start Session</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Stop confirm ── -->
+<div class="model-overlay" id="stop-confirm" onclick="if(event.target===this) closeStopConfirm()">
+  <div class="model-card" style="max-width:340px">
+    <div class="model-title">&#9632; End Session?</div>
+    <div class="model-hint">
+      Stopping will end the current session. The data file on the Pi is already saved automatically.<br><br>
+      Do you also want to download a copy before stopping?
+    </div>
+    <div class="model-btns" style="flex-direction:column;gap:8px;">
+      <button class="model-btn primary"   onclick="stopAndSave()" style="width:100%;justify-content:center"><i class="fa fa-save"></i>&nbsp; Save &amp; Stop</button>
+      <button class="model-btn secondary" onclick="stopNow()"     style="width:100%;justify-content:center">Stop without saving</button>
+      <button class="model-btn secondary" onclick="closeStopConfirm()" style="width:100%;justify-content:center">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Sessions browser ── -->
+<div class="model-overlay" id="sessions-model" onclick="if(event.target===this) closeSessions()">
+  <div class="model-card" style="min-width:420px;max-width:560px">
+    <div class="model-title"><i class="fa fa-folder-open"></i>&nbsp; Saved Sessions</div>
+    <div id="sessions-list" style="display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto;margin-top:4px;"></div>
+    <div class="model-btns">
+      <button class="model-btn secondary" onclick="closeSessions()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── On-screen keyboard ── -->
+<div id="kb-wrap"><div class="simple-keyboard"></div></div>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+

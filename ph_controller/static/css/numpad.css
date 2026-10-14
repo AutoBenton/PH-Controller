@@ -1,0 +1,54 @@
+/* numpad.css -- on-screen numeric keypad for touchscreen kiosk use.
+   Shared by index.html and config.html. Uses theme.css tokens where available
+   and falls back to literal hex, because config.html does not load theme.css. */
+
+#numpad-wrap {
+  display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 700;
+  background: var(--bg-panel, #161b22); border-top: 1px solid var(--border, #30363d);
+  padding: 10px 12px 16px; box-shadow: 0 -6px 30px rgba(0, 0, 0, 0.6);
+}
+#numpad-wrap.show { display: block; }
+
+/* Keep the pad narrow and centred -- a full-width numpad on a 7" screen
+   puts the keys uncomfortably far apart. */
+#numpad-wrap .numpad-inner { max-width: 340px; margin: 0 auto; }
+
+#numpad-wrap .numpad-label {
+  font-family: "Courier New", monospace; font-size: 0.75rem;
+  color: var(--text-muted, #8b949e); text-align: center; margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Live readout of what is being typed. The field itself can be hidden behind
+   the pad on a short screen, so this is the dependable place to read it. */
+#numpad-wrap .numpad-value {
+  font-family: "Courier New", monospace; font-size: 1.5rem; line-height: 1.3;
+  color: var(--blue, #58a6ff); text-align: center; margin-bottom: 8px;
+  min-height: 1.95rem; white-space: nowrap; overflow: hidden;
+  border-bottom: 1px solid var(--border, #30363d);
+}
+
+/* Scoped to .numpad-keyboard so these rules cannot leak onto the QWERTY
+   keyboard instance (.simple-keyboard) that index.html uses for filenames. */
+.numpad-keyboard.hg-theme-default { background: transparent; padding: 0; border: none; }
+
+.numpad-keyboard .hg-button {
+  background: var(--bg-element, #21262d) !important;
+  border-bottom: 3px solid var(--bg-hover, #30363d) !important;
+  color: var(--text-bright, #e6edf3) !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  height: 52px !important;
+  font-family: "Courier New", monospace !important;
+  font-size: 1.25rem !important;
+}
+.numpad-keyboard .hg-button:active { background: var(--blue, #58a6ff) !important; color: #fff !important; }
+
+.numpad-keyboard .hg-button[data-skbtn="{bksp}"] {
+  background: #2d1b00 !important; color: var(--yellow, #e3b341) !important;
+  border-bottom-color: #5c3a00 !important;
+}
+.numpad-keyboard .hg-button[data-skbtn="{done}"] {
+  background: var(--btn-run, #238636) !important; color: #fff !important;
+  border-bottom-color: #1a6a29 !important;
+}

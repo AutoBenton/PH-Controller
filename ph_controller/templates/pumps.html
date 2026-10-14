@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pH Controller — Pumps</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" href="/static/css/theme.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { font-family: "Courier New", monospace; background: #0d1117; color: #c9d1d9; min-height: 100vh; }
+
+    .header {
+      display: flex; align-items: center; gap: 14px;
+      background: #161b22; border-bottom: 1px solid #30363d;
+      padding: 14px 24px;
+    }
+    .header a { color: #8b949e; font-size: 1.1rem; text-decoration: none; }
+    .header a:hover { color: #c9d1d9; }
+    .header h1 { font-size: 0.95rem; font-weight: 700; color: #e6edf3; letter-spacing: 1px; text-transform: uppercase; }
+
+    .lock-banner {
+      display: none; background: #2d1a00; border-bottom: 1px solid #e3b341;
+      padding: 10px 24px; font-size: 0.8rem; color: #e3b341;
+      align-items: center; gap: 10px;
+    }
+    .lock-banner.show { display: flex; }
+
+    .page { padding: 28px 24px; display: flex; gap: 24px; flex-wrap: wrap; }
+
+    .pump-card {
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      padding: 26px; flex: 1; min-width: 300px; max-width: 520px;
+      display: flex; flex-direction: column; gap: 20px;
+    }
+    .card-header { display: flex; align-items: center; justify-content: space-between; }
+    .card-title { font-size: 0.72rem; font-weight: 700; color: #8b949e; text-transform: uppercase; letter-spacing: 2px; }
+    .cal-badge { font-size: 0.65rem; font-weight: 700; padding: 3px 10px; border-radius: 10px; }
+    .cal-badge.ok   { background: #1a3d2b; color: #56d364; }
+    .cal-badge.none { background: #21262d; color: #8b949e; }
+
+    .meta-row { display: flex; gap: 18px; font-size: 0.88rem; color: #8b949e; }
+    .meta-row span { display: flex; align-items: center; gap: 5px; }
+    .rule { border: none; border-top: 1px solid #21262d; }
+    .link-status { display: none; align-items: center; gap: 5px; color: #e3b341; font-size: 0.78rem; }
+    .link-status.show { display: inline-flex; }
+
+    .ctrl-section { display: flex; flex-direction: column; gap: 10px; }
+    .ctrl-label { font-size: 0.72rem; color: #8b949e; text-transform: uppercase; letter-spacing: 1.5px; }
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+    .btn {
+      padding: 14px 26px; border-radius: 6px; border: 1px solid #30363d;
+      background: #21262d; color: #c9d1d9; cursor: pointer;
+      font-family: "Courier New", monospace; font-size: 1.05rem;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
+      display: inline-flex; align-items: center; gap: 8px;
+      min-height: 52px;
+    }
+    .btn:hover:not(:disabled) { background: #30363d; }
+    .btn:active:not(:disabled) { transform: scale(0.96); }
+    .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .btn.green { background: #1a3d2b; border-color: #238636; color: #56d364; }
+    .btn.green:hover:not(:disabled) { background: #238636; color: #fff; }
+    .btn.red   { background: #3d1a1a; border-color: #da3633; color: #f85149; }
+    .btn.red:hover:not(:disabled)   { background: #da3633; color: #fff; }
+    .btn.blue  { background: #1a2d3d; border-color: #1f6feb; color: #58a6ff; }
+    .btn.blue:hover:not(:disabled)  { background: #1f6feb; color: #fff; }
+
+    .btn.dir-fwd { background: #1a3d2b; border-color: #238636; color: #56d364; }
+    .btn.dir-rev { background: #2d2000; border-color: #e3b341; color: #e3b341; }
+
+    /* ── Calibration Modal ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.80);
+      z-index: 100; align-items: flex-start; justify-content: center;
+      padding: 16px; overflow-y: auto;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: #161b22; border: 1px solid #30363d; border-radius: 10px;
+      width: 100%; max-width: 600px; margin: auto;
+      display: flex; flex-direction: column;
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 24px; border-bottom: 1px solid #30363d; flex-shrink: 0;
+    }
+    .modal-title { font-size: 0.85rem; font-weight: 700; color: #e6edf3; text-transform: uppercase; letter-spacing: 1.5px; }
+    .modal-close {
+      background: none; border: none; color: #8b949e; font-size: 1.4rem; cursor: pointer;
+      padding: 4px 10px; border-radius: 4px; line-height: 1;
+    }
+    .modal-close:hover { color: #e6edf3; background: #21262d; }
+    .modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 22px; }
+    .modal-rule { border: none; border-top: 1px solid #21262d; }
+
+    .cal-status-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .cal-status-text { font-size: 0.85rem; color: #8b949e; flex: 1; }
+    .cal-status-text strong { color: #c9d1d9; }
+
+    .steps-box { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 14px 16px; }
+    .steps-box .steps-title { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #8b949e; margin-bottom: 10px; }
+    .steps-box ol { padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+    .steps-box li { font-size: 0.82rem; color: #c9d1d9; line-height: 1.5; }
+    .steps-box .note { font-size: 0.75rem; color: #e3b341; margin-top: 10px; display: flex; align-items: flex-start; gap: 6px; }
+
+    .stepper-section { display: flex; flex-direction: column; gap: 12px; }
+    .stepper-label { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #8b949e; }
+
+    .stepper-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .stepper { display: flex; align-items: stretch; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+    .stepper-btn {
+      background: #21262d; border: none; color: #c9d1d9; font-size: 1.6rem;
+      width: 64px; min-height: 68px; cursor: pointer;
+      font-family: "Courier New", monospace;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.1s; user-select: none;
+    }
+    .stepper-btn:hover { background: #30363d; }
+    .stepper-btn:active { background: #1f6feb; color: #fff; transform: scale(0.96); }
+    .stepper-display {
+      background: #0d1117; min-width: 110px; min-height: 68px;
+      border-left: 1px solid #30363d; border-right: 1px solid #30363d;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.8rem; font-weight: 700; color: #e6edf3;
+    }
+    .stepper-unit { font-size: 0.85rem; color: #8b949e; }
+
+    .cal-feedback { font-size: 0.82rem; min-height: 1.3em; }
+    .cal-feedback.ok   { color: #56d364; }
+    .cal-feedback.err  { color: #f85149; }
+    .cal-feedback.info { color: #58a6ff; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <a href="/" title="Dashboard"><i class="fa fa-arrow-left"></i></a>
+  <h1>Pump Control</h1>
+</div>
+
+<div class="lock-banner" id="lock-banner">
+  <i class="fa fa-lock"></i>
+  Auto-controller is running — stop it on the dashboard before making manual changes.
+</div>
+
+<div class="page">
+
+  <!-- Pump 1 -->
+  <div class="pump-card" id="card-1">
+    <div class="card-header">
+      <span class="card-title">Pump 1 &mdash; Acid</span>
+      <span class="cal-badge none" id="cal-badge-1">Uncalibrated</span>
+    </div>
+    <div class="meta-row">
+      <span><i class="fa fa-bolt"></i> <span id="voltage-1">—</span> V</span>
+      <span class="link-status" id="link-status-1"></span>
+    </div>
+    <hr class="rule">
+    <div class="ctrl-section">
+      <div class="ctrl-label">Run / Stop</div>
+      <div class="btn-row">
+        <button class="btn green" id="run-btn-1" onclick="runPump(1)">
+          <i class="fa fa-play"></i> Run
+        </button>
+        <button class="btn red" onclick="stopPump(1)">
+          <i class="fa fa-stop"></i> Stop
+        </button>
+      </div>
+    </div>
+    <div class="ctrl-section">
+      <div class="ctrl-label">Direction</div>
+      <div class="btn-row">
+        <button class="btn dir-fwd" id="fwd-btn-1" onclick="setDirection(1, false)">
+          <i class="fa fa-arrow-right"></i> Forward
+        </button>
+        <button class="btn" id="rev-btn-1" onclick="setDirection(1, true)">
+          <i class="fa fa-undo"></i> Reverse
+        </button>
+      </div>
+    </div>
+    <hr class="rule">
+    <div class="ctrl-section">
+      <div class="ctrl-label">Calibration</div>
+      <div class="btn-row">
+        <button class="btn" onclick="openCalModal(1)">
+          <i class="fa fa-wrench"></i> Calibrate
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pump 2 -->
+  <div class="pump-card" id="card-2">
+    <div class="card-header">
+      <span class="card-title">Pump 2 &mdash; Base</span>
+      <span class="cal-badge none" id="cal-badge-2">Uncalibrated</span>
+    </div>
+    <div class="meta-row">
+      <span><i class="fa fa-bolt"></i> <span id="voltage-2">—</span> V</span>
+      <span class="link-status" id="link-status-2"></span>
+    </div>
+    <hr class="rule">
+    <div class="ctrl-section">
+      <div class="ctrl-label">Run / Stop</div>
+      <div class="btn-row">
+        <button class="btn green" id="run-btn-2" onclick="runPump(2)">
+          <i class="fa fa-play"></i> Run
+        </button>
+        <button class="btn red" onclick="stopPump(2)">
+          <i class="fa fa-stop"></i> Stop
+        </button>
+      </div>
+    </div>
+    <div class="ctrl-section">
+      <div class="ctrl-label">Direction</div>
+      <div class="btn-row">
+        <button class="btn dir-fwd" id="fwd-btn-2" onclick="setDirection(2, false)">
+          <i class="fa fa-arrow-right"></i> Forward
+        </button>
+        <button class="btn" id="rev-btn-2" onclick="setDirection(2, true)">
+          <i class="fa fa-undo"></i> Reverse
+        </button>
+      </div>
+    </div>
+    <hr class="rule">
+    <div class="ctrl-section">
+      <div class="ctrl-label">Calibration</div>
+      <div class="btn-row">
+        <button class="btn" onclick="openCalModal(2)">
+          <i class="fa fa-wrench"></i> Calibrate
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Calibration Modal ── -->
+<div class="modal-overlay" id="cal-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="cal-modal-title">Calibrate Pump</span>
+      <button class="modal-close" onclick="closeCalModal()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Status row -->
+      <div class="cal-status-row">
+        <span class="cal-status-text">Status: <strong id="cal-status-val">—</strong></span>
+        <button class="btn blue" onclick="readCalStatus()">
+          <i class="fa fa-refresh"></i> Read Status
+        </button>
+      </div>
+
+      <!-- Procedure -->
+      <div class="steps-box">
+        <div class="steps-title">Calibration Procedure</div>
+        <ol>
+          <li>Fill tubing completely with water — remove all air bubbles first.</li>
+          <li>Set a dispense volume and place a graduated cylinder under the output.</li>
+          <li>Click <strong>Dispense</strong> and wait for the pump to finish.</li>
+          <li>Measure the actual volume collected in the cylinder.</li>
+          <li>Enter that measured volume below and click <strong>Calibrate</strong>.</li>
+        </ol>
+        <div class="note">
+          <i class="fa fa-exclamation-triangle"></i>
+          Calibrate to the actual volume dispensed — not the commanded volume.
+        </div>
+      </div>
+
+      <hr class="modal-rule">
+
+      <!-- Step 1: Dispense -->
+      <div class="stepper-section">
+        <div class="stepper-label">Step 1 — Dispense Volume</div>
+        <div class="stepper-row">
+          <div class="stepper">
+            <button class="stepper-btn" onclick="adjustCal('dispense', -1.0)">&#8722;</button>
+            <div class="stepper-display" id="disp-display">10.0</div>
+            <button class="stepper-btn" onclick="adjustCal('dispense', +1.0)">+</button>
+          </div>
+          <span class="stepper-unit">mL</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn blue" id="cal-dispense-btn" onclick="doDispense()">
+            <i class="fa fa-tint"></i> Dispense
+          </button>
+        </div>
+        <div class="cal-feedback" id="cal-dispense-fb"></div>
+      </div>
+
+      <hr class="modal-rule">
+
+      <!-- Step 2: Cal value -->
+      <div class="stepper-section">
+        <div class="stepper-label">Step 2 — Measured Volume</div>
+        <div class="stepper-row">
+          <div class="stepper">
+            <button class="stepper-btn" onclick="adjustCal('actual', -0.1)">&#8722;</button>
+            <div class="stepper-display" id="actual-display">10.0</div>
+            <button class="stepper-btn" onclick="adjustCal('actual', +0.1)">+</button>
+          </div>
+          <span class="stepper-unit">mL measured</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn green" id="cal-store-btn" onclick="doCalibrate()">
+            <i class="fa fa-check"></i> Calibrate (Cal,v)
+          </button>
+        </div>
+        <div class="cal-feedback" id="cal-store-fb"></div>
+      </div>
+
+      <hr class="modal-rule">
+
+      <!-- Management -->
+      <div class="stepper-section">
+        <div class="stepper-label">Management</div>
+        <div class="btn-row">
+          <button class="btn red" id="cal-clear-btn" onclick="doClearCal()">
+            <i class="fa fa-trash"></i> Clear Calibration
+          </button>
+        </div>
+        <div class="cal-feedback" id="cal-clear-fb"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+let locked = false;
+let calPumpId = 1;
+const dirState = { 1: false, 2: false };
+const calVals  = { dispense: 10.0, actual: 10.0 };
+
+async function api(method, path, body) {
+  const opts = { method };
+  if (body) { opts.headers = {"Content-Type":"application/json"}; opts.body = JSON.stringify(body); }
+  const r = await fetch(path, opts);
+  return r.json();
+}
+
+async function pollStatus() {
+  for (const id of [1, 2]) {
+    try {
+      const s = await api("GET", `/api/pump/${id}/status`);
+      updateCard(id, s);
+    } catch(e) {
+      console.error(`pump ${id} status:`, e);
+      setLinkStatus(id, true);   // total network failure -- hold last-known UI
+    }
+  }
+}
+
+function updateCard(id, s) {
+  // Lock state is computed server-side (not over I2C), so it is always reliable.
+  if (typeof s.locked === "boolean") {
+    locked = s.locked;
+    document.getElementById("lock-banner").classList.toggle("show", locked);
+    const card = document.getElementById(`card-${id}`);
+    card.querySelectorAll(".btn").forEach(b => {
+      if (!b.classList.contains("red")) b.disabled = locked;
+    });
+  }
+
+  // Device read failed: keep last-known direction/cal/voltage and show the
+  // reconnecting indicator instead of repainting default values.
+  if (s.ok === false) {
+    setLinkStatus(id, true);
+    return;
+  }
+  setLinkStatus(id, false);
+
+  const v = s.voltage != null ? Number(s.voltage).toFixed(1) : "—";
+  document.getElementById(`voltage-${id}`).textContent = v;
+
+  dirState[id] = !!s.inverted;
+  const fwd = document.getElementById(`fwd-btn-${id}`);
+  const rev = document.getElementById(`rev-btn-${id}`);
+  if (s.inverted) {
+    fwd.className = "btn";
+    rev.className = "btn dir-rev";
+  } else {
+    fwd.className = "btn dir-fwd";
+    rev.className = "btn";
+  }
+
+  const badge = document.getElementById(`cal-badge-${id}`);
+  if (s.cal_status > 0) {
+    badge.textContent = "Calibrated"; badge.className = "cal-badge ok";
+  } else {
+    badge.textContent = "Uncalibrated"; badge.className = "cal-badge none";
+  }
+}
+
+function setLinkStatus(id, show) {
+  const el = document.getElementById(`link-status-${id}`);
+  if (!el) return;
+  if (show) {
+    el.innerHTML = '<i class="fa fa-refresh fa-spin"></i> Reconnecting...';
+    el.classList.add("show");
+  } else {
+    el.classList.remove("show");
+    el.innerHTML = "";
+  }
+}
+async function runPump(id) {
+  if (locked) return;
+  await api("POST", `/api/pump/${id}/run`, { reverse: false });
+  document.getElementById(`run-btn-${id}`).innerHTML = '<i class="fa fa-circle"></i> Running';
+}
+
+async function stopPump(id) {
+  await api("POST", `/api/pump/${id}/stop`);
+  document.getElementById(`run-btn-${id}`).innerHTML = '<i class="fa fa-play"></i> Run';
+}
+
+async function setDirection(id, wantInverted) {
+  if (locked) return;
+  if (dirState[id] === wantInverted) return;
+  await api("POST", `/api/pump/${id}/invert`);
+  await pollStatus();
+}
+
+// ── Calibration modal ────────────────────────────────────────────
+function openCalModal(id) {
+  calPumpId = id;
+  const names = { 1: "Pump 1 — Acid", 2: "Pump 2 — Base" };
+  document.getElementById("cal-modal-title").textContent = `Calibrate: ${names[id]}`;
+  ["cal-dispense-fb","cal-store-fb","cal-clear-fb"].forEach(fid => {
+    const el = document.getElementById(fid);
+    el.textContent = ""; el.className = "cal-feedback";
+  });
+  calVals.dispense = 10.0;
+  calVals.actual   = 10.0;
+  updateCalDisplays();
+  readCalStatus();
+  document.getElementById("cal-modal").classList.add("show");
+}
+
+function closeCalModal() {
+  document.getElementById("cal-modal").classList.remove("show");
+  pollStatus();
+}
+
+function adjustCal(field, delta) {
+  const min = (field === "dispense") ? 0.5 : 0.1;
+  const precision = (Math.abs(delta) < 0.5) ? 1 : 1;
+  let v = Math.round((calVals[field] + delta) * 10) / 10;
+  calVals[field] = Math.max(min, v);
+  updateCalDisplays();
+}
+
+function updateCalDisplays() {
+  document.getElementById("disp-display").textContent   = calVals.dispense.toFixed(1);
+  document.getElementById("actual-display").textContent = calVals.actual.toFixed(1);
+}
+
+async function readCalStatus() {
+  const el = document.getElementById("cal-status-val");
+  el.textContent = "reading...";
+  try {
+    const s = await api("GET", `/api/pump/${calPumpId}/status`);
+    if (s.ok === false) { el.textContent = "device unreachable -- try again"; return; }
+    const labels = { 0: "Uncalibrated", 1: "Volume cal", 2: "Volume/time cal", 3: "Both (vol + time)" };
+    el.textContent = labels[s.cal_status] !== undefined ? labels[s.cal_status] : `Code ${s.cal_status}`;
+  } catch(e) { el.textContent = "error"; }
+}
+async function doDispense() {
+  if (locked) return;
+  const ml = calVals.dispense;
+  const fb  = document.getElementById("cal-dispense-fb");
+  const btn = document.getElementById("cal-dispense-btn");
+  fb.textContent = `Dispensing ${ml.toFixed(1)} mL…`; fb.className = "cal-feedback info";
+  btn.disabled = true;
+  try {
+    const r = await api("POST", `/api/pump/${calPumpId}/dispense`, { ml });
+    if (r.ok) {
+      fb.textContent = `Done — ${ml.toFixed(1)} mL commanded. Measure actual output then set Step 2.`;
+      fb.className = "cal-feedback ok";
+      calVals.actual = ml;
+      updateCalDisplays();
+    } else {
+      fb.textContent = r.error || "Dispense failed."; fb.className = "cal-feedback err";
+    }
+  } catch(e) { fb.textContent = "Request failed."; fb.className = "cal-feedback err"; }
+  btn.disabled = false;
+}
+
+async function doCalibrate() {
+  if (locked) return;
+  const actual = calVals.actual;
+  const fb  = document.getElementById("cal-store-fb");
+  const btn = document.getElementById("cal-store-btn");
+  fb.textContent = "Storing calibration…"; fb.className = "cal-feedback info";
+  btn.disabled = true;
+  try {
+    const r = await api("POST", `/api/pump/${calPumpId}/calibrate`, { actual_ml: actual });
+    if (r.ok) {
+      fb.textContent = `Calibrated to ${actual.toFixed(2)} mL.`; fb.className = "cal-feedback ok";
+      readCalStatus();
+    } else {
+      fb.textContent = r.error || "Calibration failed."; fb.className = "cal-feedback err";
+    }
+  } catch(e) { fb.textContent = "Request failed."; fb.className = "cal-feedback err"; }
+  btn.disabled = false;
+}
+
+async function doClearCal() {
+  const fb  = document.getElementById("cal-clear-fb");
+  const btn = document.getElementById("cal-clear-btn");
+  fb.textContent = "Clearing…"; fb.className = "cal-feedback info";
+  btn.disabled = true;
+  try {
+    const r = await api("POST", `/api/pump/${calPumpId}/calibrate/clear`);
+    if (r.ok) {
+      fb.textContent = "Calibration cleared."; fb.className = "cal-feedback ok";
+      readCalStatus();
+    } else {
+      fb.textContent = r.error || "Clear failed."; fb.className = "cal-feedback err";
+    }
+  } catch(e) { fb.textContent = "Request failed."; fb.className = "cal-feedback err"; }
+  btn.disabled = false;
+}
+
+pollStatus();
+setInterval(pollStatus, 3000);
+</script>
+</body>
+</html>
