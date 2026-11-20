@@ -2,8 +2,8 @@
 
 Automated pH dosing for a tank or reservoir, built on a Raspberry Pi with Atlas Scientific EZO-pH
 and EZO-PMP hardware. A proportional controller reads pH on a fast loop and doses acid or base to
-hold a target, with a touchscreen dashboard, manual pump control, calibration wizards, and CSV
-session logging.
+hold a target, with a touchscreen dashboard, manual pump control, calibration wizards, CSV session
+logging, and one-click email data export.
 
 **Status:** running in daily lab use. The electronics and software are complete and working; the
 enclosure and video guide are not done yet, and there is no cumulative dose cap — read
@@ -120,12 +120,29 @@ i2cdetect -y 1         # expect 63, 67 and 72
 ### 3. Get the code
 
 ```bash
-git clone https://github.com/Ahmedmoui/ph-controller.git ~/pHDoseingProject
-cd ~/pHDoseingProject/ph_controller
+git clone https://github.com/AutoBenton/PH-Controller.git ~/PH-Controller
+cd ~/PH-Controller/ph_controller
 python3 app.py
 ```
 
 The dashboard is then on `http://<pi-ip>:8080`. Stop it with `Ctrl-C`.
+
+#### Automated Service & Kiosk Setup (Recommended)
+
+You can automatically configure the systemd background service, Chromium fullscreen kiosk, autologin, and I2C bus permissions using the included deployment script:
+
+```bash
+cd ~/PH-Controller
+bash deploy/install.sh && sudo reboot
+```
+
+After rebooting, the controller runs automatically as a systemd service (`ph-controller.service`). You can manage it with:
+
+```bash
+sudo systemctl status ph-controller
+sudo systemctl restart ph-controller
+sudo systemctl stop ph-controller
+```
 
 ### 4. Calibrate before first use
 
@@ -198,6 +215,34 @@ hour and then drifts, the correction happens on the next measurement, not after 
 
 > Both default to 1 second, which makes dosing effectively continuous. Raise `dose_interval_sec` to
 > match how long your tank takes to homogenise — typically tens of seconds to minutes.
+
+---
+
+## Email Data Export
+
+Session CSV logs can be emailed directly from the UI without removing the SD card or using a USB drive.
+
+### 1. Configure Email Credentials & Presets
+
+1. Open **Configuration (⚙️)** from the dashboard.
+2. In the **Email Credentials** section, enter:
+   - **Sender Email** — your Gmail or SMTP address (e.g. `example@gmail.com`).
+   - **Sender Password / App Password** — your password or app password (e.g. `examplePSWD`).
+     > **Note for Gmail accounts:** Google requires a 16-character **App Password** (requires 2-Step Verification). Generate one under **Google Account → Security → 2-Step Verification → App Passwords** and paste it here.
+   - *(Optional)* Expand **Advanced SMTP Options** to customize the SMTP host or port (defaults to `smtp.gmail.com:587`).
+3. Click **Test Credentials** to verify SMTP connectivity and login authentication.
+4. Add frequently used destination addresses in the **Preset Recipient Emails** list using **+ Add** and **Delete (×)**.
+5. Click **Save All Settings**.
+
+### 2. Exporting Data with Just a Few Clicks
+
+- **After saving a session:** Once you save a session on the main screen, an export prompt banner appears and the **Export Data** button pulses. Click it to open the export popup with that session pre-selected.
+- **Export Data button:** Click **Export Data** in the bottom action bar anytime to open the export dialog.
+- **Saved Sessions browser:** Click **Sessions** in the bottom bar, then click the **Email** button next to any saved session row.
+- **In the Export popup:**
+  1. Select a recipient from your preset emails dropdown (or type a custom address).
+  2. Select which saved session(s) to include using the checkboxes, or click **Select All**.
+  3. Click **Send Email**. The controller attaches the CSV files, sends the email, and displays delivery confirmation.
 
 ---
 
@@ -282,8 +327,10 @@ sudo ufw enable
 ## Project Structure
 
 ```
-pHDoseingProject/
+PH-Controller/
 ├── ph_dosing_terminal_controler.py   # Standalone CLI controller (no UI required)
+├── deploy/                           # Provisioning & systemd service scripts
+│   └── install.sh                    # Automated Raspberry Pi OS provisioning
 ├── CLAUDE.md                         # Architecture notes + hardware gotchas
 ├── docs/
 │   ├── API.md                        # REST API reference
@@ -293,17 +340,18 @@ pHDoseingProject/
     ├── app.py                        # Flask entry point + Basic Auth
     ├── controller.py                 # Background dosing loop
     ├── sensors.py                    # pH sensor helper functions
+    ├── mailer.py                     # SMTP email service & CSV attachment export
     ├── config.py / config.json       # Settings load/save + runtime values
     ├── STYLE.md                      # UI colour token reference
     ├── hardware/
     │   ├── ezo_i2c.py                # Low-level Atlas Scientific EZO I2C driver
     │   └── pump.py                   # High-level pump control helpers
     ├── routes/
-    │   ├── dashboard.py              # Dashboard + session API routes
+    │   ├── dashboard.py              # Dashboard, session, & export API routes
     │   ├── pump_routes.py            # Manual pump control API routes
-    │   └── config_routes.py          # Config + pH calibration API routes
+    │   └── config_routes.py          # Config, email test, & pH calibration API routes
     ├── templates/                    # Jinja2 HTML templates (standalone, no shared base)
-    ├── static/                       # Theme CSS, on-screen numpad, vendored keyboard
+    ├── static/                       # Theme CSS, on-screen numpad, on-screen keyboard
     └── sessions/                     # CSV session logs (auto-created, git-ignored)
 ```
 

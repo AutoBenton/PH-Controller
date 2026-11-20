@@ -33,14 +33,16 @@ Three server-rendered HTML pages, all `GET`:
 
 ## Sessions
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/sessions` | List saved CSV sessions (`name`, `size_kb`, `modified`) |
-| `GET` | `/api/sessions/<filename>` | Download a session CSV |
-| `DELETE` | `/api/sessions/<filename>` | Delete a session CSV |
-| `GET` | `/api/sessions/<filename>/preview` | Downsampled `{"ph": [...], "target": [...]}` (max 60 points) for chart previews |
+| Method | Endpoint | Body | Description |
+|---|---|---|---|
+| `GET` | `/api/sessions` | — | List saved CSV sessions (`name`, `size_kb`, `modified`) |
+| `GET` | `/api/sessions/<filename>` | — | Download a session CSV |
+| `POST` | `/api/sessions/save` | `{"filename": "session.csv", "csv": "..."}` | Save or upload a session CSV to the server sessions directory |
+| `DELETE` | `/api/sessions/<filename>` | — | Delete a session CSV |
+| `GET` | `/api/sessions/<filename>/preview` | — | Downsampled `{"ph": [...], "target": [...]}` (max 60 points) for chart previews |
+| `POST` | `/api/export/email` | `{"recipient": "user@example.com", "sessions": ["session.csv"]}` | Send selected session CSV files as email attachments |
 
-`<filename>` must end in `.csv` and may not contain `/` or `..`; anything else returns `400`.
+`<filename>` must end in `.csv` and may not contain `/`, `\`, or `..`; anything else returns `400`.
 
 ## Manual Pump Control
 
@@ -70,6 +72,7 @@ and the other fields are absent — hold your last known values rather than trea
 |---|---|---|---|
 | `GET` | `/api/config` | — | Read current config |
 | `POST` | `/api/config` | Any subset of the fields below | Update config; applies immediately, mid-session |
+| `POST` | `/api/config/test-email` | `{"email_user": "...", "email_password": "..."}` | Test SMTP connection & credentials |
 | `GET` | `/api/calibrate/reading` | — | Current pH + calibration point count + probe slope |
 | `POST` | `/api/calibrate/mid` | `{"value": 7.0}` | Calibrate pH mid point — **do this first** |
 | `POST` | `/api/calibrate/low` | `{"value": 4.0}` | Calibrate pH low point |
@@ -93,6 +96,11 @@ and the other fields are absent — hold your last known values rather than trea
 | `poll_sec` | float | 1–300 | Measurement Interval (s) | How often pH is read and logged |
 | `dose_interval_sec` | float | 1–3600 | Dose Interval (s) | Minimum time between doses |
 | `simulate_ph` | bool | — | Simulate pH oscillation | Replaces the sensor with a sine wave for demos |
+| `email_user` | str | — | Sender Email | SMTP / Gmail sender address (e.g. `example@gmail.com`) |
+| `email_password` | str | — | Sender Password | App password or email account password |
+| `smtp_server` | str | — | SMTP Host | Default `smtp.gmail.com` |
+| `smtp_port` | int | 1–65535 | SMTP Port | Default `587` |
+| `preset_emails` | list | — | Preset Recipient Emails | Saved list of recipient email addresses for quick export |
 
 Out-of-range values are rejected with `400` and an `{"error": ...}` message.
 
