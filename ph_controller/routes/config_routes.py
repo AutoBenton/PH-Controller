@@ -1,7 +1,8 @@
-﻿from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request
 from controller import controller
 import config as cfg_mod
 import sensors
+import mailer
 
 bp = Blueprint("config_routes", __name__)
 
@@ -47,11 +48,41 @@ def api_config_post():
                 cfg[k] = v
         if "simulate_ph" in data:
             cfg["simulate_ph"] = bool(data["simulate_ph"])
+        if "email_user" in data:
+            cfg["email_user"] = str(data["email_user"]).strip()
+        if "email_password" in data:
+            cfg["email_password"] = str(data["email_password"])
+        if "smtp_server" in data:
+            cfg["smtp_server"] = str(data["smtp_server"]).strip() or "smtp.gmail.com"
+        if "smtp_port" in data:
+            try:
+                cfg["smtp_port"] = int(data["smtp_port"])
+            except (ValueError, TypeError):
+                cfg["smtp_port"] = 587
+        if "preset_emails" in data and isinstance(data["preset_emails"], list):
+            cfg["preset_emails"] = [
+                str(e).strip() for e in data["preset_emails"] if str(e).strip()
+            ]
         cfg_mod.save(cfg)
         controller.reload_config()
         return jsonify(cfg)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 400
+
+
+@bp.route("/api/config/test-email", methods=["POST"])
+def api_test_email():
+    try:
+        data = request.get_json(force=True, silent=True) or {}
+        res = mailer.test_smtp_connection(
+            email_user=data.get("email_user"),
+            email_password=data.get("email_password"),
+            smtp_server=data.get("smtp_server"),
+            smtp_port=data.get("smtp_port")
+        )
+        return jsonify(res), (200 if res.get("ok") else 400)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
 
 
 @bp.route("/api/calibrate/reading")

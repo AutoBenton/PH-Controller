@@ -1,4 +1,4 @@
-﻿"""config.py -- Load/save settings from config.json next to this file."""
+"""config.py -- Load/save settings from config.json next to this file."""
 
 import json
 import os
@@ -16,6 +16,11 @@ DEFAULTS = {
     "poll_sec":   1.0,   # measurement interval -- how often pH is read/logged
     "dose_interval_sec": 1.0,  # min seconds between doses (settling time)
     "simulate_ph": False,
+    "email_user": "",          # sender email (e.g. example@gmail.com)
+    "email_password": "",      # sender password / app password (e.g. examplePSWD)
+    "smtp_server": "smtp.gmail.com",
+    "smtp_port": 587,
+    "preset_emails": [],       # dynamic list of preset recipient emails
 }
 
 

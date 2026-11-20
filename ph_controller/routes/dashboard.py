@@ -1,10 +1,11 @@
-﻿import csv
+import csv
 import glob
 import os
 
 from flask import Blueprint, jsonify, render_template, request, send_from_directory
 from controller import controller
 import config as cfg_mod
+import mailer
 
 bp = Blueprint("dashboard", __name__)
 
@@ -142,3 +143,46 @@ def api_session_preview(filename):
         return jsonify({"ph": ph_vals, "target": target_vals})
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+@bp.route("/api/sessions/save", methods=["POST"])
+def api_session_save():
+    """Save/upload a session CSV file to the sessions directory."""
+    try:
+        data = request.get_json(force=True)
+        raw_name = data.get("filename", "").strip()
+        csv_text = data.get("csv", "")
+        if not raw_name.endswith(".csv") or "/" in raw_name or "\\" in raw_name or ".." in raw_name:
+            return jsonify({"error": "invalid filename"}), 400
+        os.makedirs(_SESSIONS_DIR, exist_ok=True)
+        path = os.path.join(os.path.abspath(_SESSIONS_DIR), raw_name)
+        with open(path, "w", newline="") as f:
+            f.write(csv_text)
+        stat = os.stat(path)
+        return jsonify({
+            "saved": raw_name,
+            "size_kb": round(stat.st_size / 1024, 1),
+            "modified": stat.st_mtime,
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@bp.route("/api/export/email", methods=["POST"])
+def api_export_email():
+    """Send selected session CSV files via email using saved credentials."""
+    try:
+        data = request.get_json(force=True)
+        recipient = data.get("recipient", "").strip()
+        sessions = data.get("sessions", [])
+        if isinstance(sessions, str):
+            sessions = [sessions]
+        res = mailer.send_session_email(
+            recipient=recipient,
+            session_filenames=sessions,
+            sessions_dir=_SESSIONS_DIR,
+            cfg=cfg_mod.load(),
+        )
+        return jsonify(res), (200 if res.get("ok") else 400)
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500

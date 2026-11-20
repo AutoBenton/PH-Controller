@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -67,9 +67,29 @@
     .demo-badge { display: inline-block; font-size: 0.65rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; background: #2d2008; color: #e3b341; border: 1px solid #5c4510; border-radius: 4px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
 
     /* ── Toast ── */
-    .toast { position: fixed; bottom: 20px; right: 20px; background: #238636; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: 0.85rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+    .toast { position: fixed; bottom: 20px; right: 20px; background: #238636; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: 0.85rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 1000; }
     .toast.show { opacity: 1; }
     .toast.error { background: #da3633; }
+
+    /* ── Preset emails ── */
+    .preset-email-row { display: flex; align-items: center; justify-content: space-between; background: #0d1117; border: 1px solid #30363d; border-radius: 4px; padding: 7px 10px; font-size: 0.85rem; }
+    .preset-email-text { color: #c9d1d9; word-break: break-all; }
+    .btn-del-email { background: transparent; border: 1px solid #da3633; color: #f85149; border-radius: 4px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 1.2rem; line-height: 1; transition: background 0.15s, color 0.15s; }
+    .btn-del-email:hover { background: #da3633; color: #fff; }
+
+    /* ── On-screen keyboard ── */
+    #kb-wrap {
+      display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 600;
+      background: #161b22; border-top: 1px solid #30363d;
+      padding: 10px 12px 16px; box-shadow: 0 -6px 30px rgba(0,0,0,0.6);
+    }
+    #kb-wrap.show { display: block; }
+    .simple-keyboard.hg-theme-default { background: transparent; padding: 0; border: none; }
+    .hg-button { background: #21262d !important; border-bottom: 3px solid #30363d !important; color: #e6edf3 !important; border-radius: 6px !important; box-shadow: none !important; height: 46px !important; font-family: "Courier New",monospace !important; font-size: 1rem !important; }
+    .hg-button:active { background: #58a6ff !important; color: #fff !important; }
+    .hg-button[data-skbtn="{bksp}"]  { background: #2d1b00 !important; color: #e3b341 !important; border-bottom-color: #5c3a00 !important; }
+    .hg-button[data-skbtn="{shift}"] { background: #30363d !important; }
+    .hg-button[data-skbtn="{space}"] { flex-grow: 3 !important; }
   </style>
 </head>
 <body>
@@ -142,57 +162,298 @@
     </div>
   </div>
 
-  <!-- ── Right: calibration ── -->
-  <div class="card">
-    <h2>pH Probe Calibration</h2>
+  <!-- ── Right: calibration & email ── -->
+  <div>
+    <div class="card">
+      <h2>pH Probe Calibration</h2>
 
-    <div class="warning">&#9888; Stop the controller before calibrating. Calibrate in order: Mid &rarr; Low &rarr; High.</div>
+      <div class="warning">&#9888; Stop the controller before calibrating. Calibrate in order: Mid &rarr; Low &rarr; High.</div>
 
-    <div class="ph-reading" id="cal-ph">-.-</div>
-    <div class="cal-meta" id="cal-meta">Calibration: -- points stored</div>
+      <div class="ph-reading" id="cal-ph">-.-</div>
+      <div class="cal-meta" id="cal-meta">Calibration: -- points stored</div>
 
-    <div class="slope-box" id="slope-box" style="display:none;">
-      Acid slope: <span id="sl-acid">--</span>% &nbsp;|&nbsp;
-      Base slope: <span id="sl-base">--</span>% &nbsp;|&nbsp;
-      Zero offset: <span id="sl-zero">--</span> mV
+      <div class="slope-box" id="slope-box" style="display:none;">
+        Acid slope: <span id="sl-acid">--</span>% &nbsp;|&nbsp;
+        Base slope: <span id="sl-base">--</span>% &nbsp;|&nbsp;
+        Zero offset: <span id="sl-zero">--</span> mV
+      </div>
+
+      <hr class="rule">
+
+      <div class="cal-row">
+        <label>Mid point</label>
+        <input type="number" id="val-mid" value="7.00" step="0.01">
+        <button class="btn btn-secondary" onclick="calibrate('mid')">Calibrate</button>
+      </div>
+      <div class="cal-row">
+        <label>Low point</label>
+        <input type="number" id="val-low" value="4.00" step="0.01">
+        <button class="btn btn-secondary" onclick="calibrate('low')">Calibrate</button>
+      </div>
+      <div class="cal-row">
+        <label>High point</label>
+        <input type="number" id="val-high" value="10.00" step="0.01">
+        <button class="btn btn-secondary" onclick="calibrate('high')">Calibrate</button>
+      </div>
+
+      <hr class="rule">
+      <button class="btn btn-danger" onclick="clearCal()">&#9003; Clear All Calibration</button>
     </div>
 
-    <hr class="rule">
+    <!-- ── Email Configuration Card ── -->
+    <div class="card" style="margin-top:16px;">
+      <h2>Email Credentials</h2>
+      <div class="field-hint" style="margin-top:0;margin-bottom:12px;">
+        Provide sender credentials (e.g. Gmail) to email saved session data with just a few clicks.
+      </div>
 
-    <div class="cal-row">
-      <label>Mid point</label>
-      <input type="number" id="val-mid" value="7.00" step="0.01">
-      <button class="btn btn-secondary" onclick="calibrate('mid')">Calibrate</button>
-    </div>
-    <div class="cal-row">
-      <label>Low point</label>
-      <input type="number" id="val-low" value="4.00" step="0.01">
-      <button class="btn btn-secondary" onclick="calibrate('low')">Calibrate</button>
-    </div>
-    <div class="cal-row">
-      <label>High point</label>
-      <input type="number" id="val-high" value="10.00" step="0.01">
-      <button class="btn btn-secondary" onclick="calibrate('high')">Calibrate</button>
-    </div>
+      <div class="field">
+        <label>Sender Email</label>
+        <input type="email" id="email_user" placeholder="example@gmail.com" autocomplete="email">
+      </div>
 
-    <hr class="rule">
-    <button class="btn btn-danger" onclick="clearCal()">&#9003; Clear All Calibration</button>
+      <div class="field">
+        <label>Sender Password / App Password</label>
+        <div style="position:relative; display:flex; align-items:center;">
+          <input type="password" id="email_password" placeholder="examplePSWD" autocomplete="current-password" style="padding-right:55px;">
+          <button type="button" id="btn-toggle-pw" onclick="togglePasswordVisibility()" style="position:absolute; right:8px; background:transparent; border:none; color:#58a6ff; font-family:inherit; font-size:0.75rem; cursor:pointer; padding:4px;">SHOW</button>
+        </div>
+        <div class="field-hint">
+          For Gmail, use a 16-character <strong>App Password</strong> generated in Google Account settings (Security &rarr; 2-Step Verification &rarr; App Passwords).
+        </div>
+      </div>
+
+      <details style="margin:12px 0; font-size:0.75rem; color:#8b949e;">
+        <summary style="cursor:pointer; color:#58a6ff; user-select:none;">Advanced SMTP Options (Default: Gmail)</summary>
+        <div style="margin-top:8px; padding:10px; background:#0d1117; border:1px solid #21262d; border-radius:4px;">
+          <div class="field" style="margin-bottom:8px;">
+            <label>SMTP Host</label>
+            <input type="text" id="smtp_server" value="smtp.gmail.com" placeholder="smtp.gmail.com">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>SMTP Port</label>
+            <input type="number" id="smtp_port" value="587" min="1" max="65535">
+          </div>
+        </div>
+      </details>
+
+      <div style="display:flex; gap:10px; margin-bottom:18px;">
+        <button type="button" class="btn btn-secondary" onclick="testEmailConnection()" style="font-size:0.8rem; padding:8px 14px; min-height:40px;">&#9881; Test Credentials</button>
+      </div>
+
+      <hr class="rule">
+
+      <h2>Preset Recipient Emails</h2>
+      <div class="field-hint" style="margin-top:0;margin-bottom:10px;">
+        Preset email addresses for quick 1-click selection when exporting data.
+      </div>
+
+      <div id="preset-emails-list" style="display:flex; flex-direction:column; gap:6px; margin-bottom:12px; max-height:160px; overflow-y:auto;">
+        <!-- Populated dynamically -->
+      </div>
+
+      <div style="display:flex; gap:8px;">
+        <input type="email" id="new-preset-email" placeholder="colleague@example.com" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addPresetEmail();}">
+        <button type="button" class="btn btn-secondary" onclick="addPresetEmail()" style="min-height:42px; padding:6px 16px; white-space:nowrap;">+ Add</button>
+      </div>
+
+      <div style="margin-top:16px;">
+        <button class="btn btn-primary" onclick="saveConfig()" style="width:100%;">&#10003; Save All Settings</button>
+      </div>
+    </div>
   </div>
 
 </div>
 
 <div class="toast" id="toast"></div>
 
+<!-- ── On-screen keyboard ── -->
+<div id="kb-wrap"><div class="simple-keyboard"></div></div>
+
 <script>
+let presetEmails = [];
+let keyboard = null;
+let kbTarget = null;
+
+// ── On-screen keyboard ───────────────────────────────────────────
+function initKeyboard() {
+  try {
+    const KB = typeof SimpleKeyboard === "function" ? SimpleKeyboard : SimpleKeyboard.default;
+    if (!KB) return;
+    keyboard = new KB({
+      onChange: (val) => { if (kbTarget) kbTarget.value = val; },
+      onKeyPress: (btn) => {
+        if (btn === "{shift}" || btn === "{lock}") {
+          const cur = keyboard.options.layoutName || "default";
+          keyboard.setOptions({ layoutName: cur === "default" ? "shift" : "default" });
+        }
+      },
+      layout: {
+        default: [
+          "1 2 3 4 5 6 7 8 9 0 {bksp}",
+          "q w e r t y u i o p",
+          "a s d f g h j k l",
+          "{shift} z x c v b n m @ . _ -",
+          "{space}"
+        ],
+        shift: [
+          "! # $ % & * ( ) + = {bksp}",
+          "Q W E R T Y U I O P",
+          "A S D F G H J K L",
+          "{shift} Z X C V B N M @ . _ -",
+          "{space}"
+        ]
+      },
+      display: { "{bksp}": "⌫", "{shift}": "⇧", "{space}": "Space" },
+      theme: "hg-theme-default",
+      preventMouseDownDefault: true
+    });
+
+    document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"]').forEach(el => {
+      el.addEventListener("focus", () => showKb(el));
+    });
+  } catch(e) { console.error("initKeyboard error:", e); }
+}
+
+function showKb(inputEl) {
+  if (!keyboard) return;
+  kbTarget = inputEl;
+  keyboard.setInput(inputEl.value || "");
+  keyboard.setOptions({ layoutName: "default" });
+  document.getElementById("kb-wrap").classList.add("show");
+}
+
+function hideKb() {
+  if (!keyboard) return;
+  document.getElementById("kb-wrap").classList.remove("show");
+  kbTarget = null;
+}
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#kb-wrap") &&
+      !e.target.matches('input[type="text"], input[type="email"], input[type="password"]') &&
+      !e.target.closest(".btn-del-email") &&
+      !e.target.closest("#btn-toggle-pw")) {
+    hideKb();
+  }
+});
+
+// ── Password Visibility ──────────────────────────────────────────
+function togglePasswordVisibility() {
+  const pwEl = document.getElementById("email_password");
+  const btn = document.getElementById("btn-toggle-pw");
+  if (!pwEl) return;
+  if (pwEl.type === "password") {
+    pwEl.type = "text";
+    btn.textContent = "HIDE";
+  } else {
+    pwEl.type = "password";
+    btn.textContent = "SHOW";
+  }
+}
+
+// ── Preset Emails List ───────────────────────────────────────────
+function renderPresetEmails() {
+  const listEl = document.getElementById("preset-emails-list");
+  if (!listEl) return;
+  if (!presetEmails || presetEmails.length === 0) {
+    listEl.innerHTML = '<div style="color:#8b949e;font-size:0.78rem;padding:6px 2px;">No preset recipient emails added yet.</div>';
+    return;
+  }
+  listEl.innerHTML = presetEmails.map((email, idx) => `
+    <div class="preset-email-row">
+      <span class="preset-email-text">${escapeHtml(email)}</span>
+      <button type="button" class="btn-del-email" onclick="deletePresetEmail(${idx})" title="Delete email">&times;</button>
+    </div>
+  `).join("");
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function addPresetEmail() {
+  const input = document.getElementById("new-preset-email");
+  const val = (input.value || "").trim();
+  if (!val) return;
+  if (!val.includes("@") || !val.includes(".")) {
+    toast("Please enter a valid email address", true);
+    input.focus();
+    return;
+  }
+  if (presetEmails.some(e => e.toLowerCase() === val.toLowerCase())) {
+    toast("Email already in preset list", true);
+    return;
+  }
+  presetEmails.push(val);
+  input.value = "";
+  renderPresetEmails();
+  toast("Added to preset list (remember to Save)", false);
+}
+
+function deletePresetEmail(idx) {
+  presetEmails.splice(idx, 1);
+  renderPresetEmails();
+}
+
+async function testEmailConnection() {
+  const email_user = (document.getElementById("email_user").value || "").trim();
+  const email_password = document.getElementById("email_password").value;
+  const smtp_server = (document.getElementById("smtp_server").value || "").trim() || "smtp.gmail.com";
+  const smtp_port = parseInt(document.getElementById("smtp_port").value, 10) || 587;
+
+  if (!email_user) {
+    toast("Please enter a sender email address first", true);
+    document.getElementById("email_user").focus();
+    return;
+  }
+  if (!email_password) {
+    toast("Please enter a sender password first", true);
+    document.getElementById("email_password").focus();
+    return;
+  }
+
+  toast("Testing email credentials...", false);
+  try {
+    const r = await fetch("/api/config/test-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email_user, email_password, smtp_server, smtp_port })
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) {
+      throw new Error(d.error || "Connection test failed");
+    }
+    toast("Credentials verified! " + d.message, false);
+  } catch(e) {
+    toast("Test failed: " + e.message, true);
+  }
+}
+
 // ── Load config into form ────────────────────────────────────────
 async function loadConfig() {
   try {
     const r = await fetch("/api/config");
     const d = await r.json();
     ["ph_addr","pump1_addr","pump2_addr","i2c_bus","deadband","dose_ml","dose_p_gain","poll_sec","dose_interval_sec"]
-      .forEach(k => { const el = document.getElementById(k); if (el) el.value = d[k]; });
+      .forEach(k => { const el = document.getElementById(k); if (el && d[k] !== undefined) el.value = d[k]; });
     const simEl = document.getElementById("simulate_ph");
     if (simEl) simEl.checked = !!d.simulate_ph;
+
+    const userEl = document.getElementById("email_user");
+    if (userEl && d.email_user !== undefined) userEl.value = d.email_user;
+
+    const pwEl = document.getElementById("email_password");
+    if (pwEl && d.email_password !== undefined) pwEl.value = d.email_password;
+
+    const srvEl = document.getElementById("smtp_server");
+    if (srvEl && d.smtp_server !== undefined) srvEl.value = d.smtp_server;
+
+    const portEl = document.getElementById("smtp_port");
+    if (portEl && d.smtp_port !== undefined) portEl.value = d.smtp_port;
+
+    presetEmails = Array.isArray(d.preset_emails) ? [...d.preset_emails] : [];
+    renderPresetEmails();
   } catch(e) { console.error("loadConfig:", e); }
 }
 
@@ -206,8 +467,6 @@ async function saveConfig() {
   for (const k of keys) {
     const el = document.getElementById(k);
     if (!el) continue;
-    // Reject out-of-range / non-numeric here, using the min/max/step already
-    // declared on the markup, so bad values never reach the controller or I2C.
     if (!el.checkValidity()) {
       el.reportValidity();
       toast(k + ": " + el.validationMessage, true);
@@ -219,6 +478,21 @@ async function saveConfig() {
   }
   const simEl = document.getElementById("simulate_ph");
   if (simEl) data.simulate_ph = simEl.checked;
+
+  const userEl = document.getElementById("email_user");
+  if (userEl) data.email_user = userEl.value.trim();
+
+  const pwEl = document.getElementById("email_password");
+  if (pwEl) data.email_password = pwEl.value;
+
+  const srvEl = document.getElementById("smtp_server");
+  if (srvEl) data.smtp_server = srvEl.value.trim() || "smtp.gmail.com";
+
+  const portEl = document.getElementById("smtp_port");
+  if (portEl) data.smtp_port = parseInt(portEl.value, 10) || 587;
+
+  data.preset_emails = presetEmails;
+
   try {
     const r = await fetch("/api/config", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(data) });
     const d = await r.json();
@@ -306,6 +580,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // One call covers every numeric field on the page (settings + calibration),
   // so no field is left untypable on the touchscreen kiosk.
   attachNumpad('input[type="number"]');
+  initKeyboard();
 });
 </script>
 </body>
