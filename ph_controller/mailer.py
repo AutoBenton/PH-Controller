@@ -7,7 +7,54 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import os
 import smtplib
+import ssl
 import config as cfg_mod
+
+
+def _connect_and_login(server_host: str, port: int, user: str, pw: str, timeout: int = 20):
+    """Attempt SMTP connection and login with automatic fallback between ports 587 and 465."""
+    clean_user = user.strip()
+    clean_pw = pw.strip().replace(" ", "")
+
+    ports_to_try = [port]
+    if port == 587 and 465 not in ports_to_try:
+        ports_to_try.append(465)
+    elif port == 465 and 587 not in ports_to_try:
+        ports_to_try.append(587)
+
+    last_exc = None
+    for p in ports_to_try:
+        server = None
+        try:
+            ctx = ssl.create_default_context()
+            if p == 465:
+                server = smtplib.SMTP_SSL(server_host, p, context=ctx, timeout=timeout)
+            else:
+                server = smtplib.SMTP(server_host, p, timeout=timeout)
+                server.ehlo()
+                server.starttls(context=ctx)
+                server.ehlo()
+
+            server.login(clean_user, clean_pw)
+            return server, p
+        except smtplib.SMTPAuthenticationError:
+            if server:
+                try:
+                    server.quit()
+                except Exception:
+                    pass
+            raise
+        except Exception as exc:
+            if server:
+                try:
+                    server.quit()
+                except Exception:
+                    pass
+            last_exc = exc
+
+    if last_exc:
+        raise last_exc
+    raise RuntimeError(f"Could not connect to {server_host} on ports {ports_to_try}")
 
 
 def test_smtp_connection(
@@ -33,10 +80,10 @@ def test_smtp_connection(
     ) or "smtp.gmail.com"
     try:
         port = int(
-            smtp_port if smtp_port is not None else cfg.get("smtp_port", 587)
+            smtp_port if smtp_port is not None else cfg.get("smtp_port", 465)
         )
     except (ValueError, TypeError):
-        port = 587
+        port = 465
 
     if not user:
         return {"ok": False, "error": "Sender email address cannot be empty."}
@@ -45,18 +92,10 @@ def test_smtp_connection(
 
     server = None
     try:
-        if port == 465:
-            server = smtplib.SMTP_SSL(server_host, port, timeout=15)
-        else:
-            server = smtplib.SMTP(server_host, port, timeout=15)
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-
-        server.login(user, pw)
+        server, used_port = _connect_and_login(server_host, port, user, pw, timeout=15)
         return {
             "ok": True,
-            "message": f"Successfully authenticated with {server_host} as {user}.",
+            "message": f"Successfully authenticated with {server_host} (port {used_port}) as {user}.",
         }
     except smtplib.SMTPAuthenticationError:
         return {
@@ -96,9 +135,9 @@ def send_session_email(
     pw = cfg.get("email_password") or ""
     server_host = (cfg.get("smtp_server") or "smtp.gmail.com").strip()
     try:
-        port = int(cfg.get("smtp_port") or 587)
+        port = int(cfg.get("smtp_port") or 465)
     except (ValueError, TypeError):
-        port = 587
+        port = 465
 
     if not user or not pw:
         return {
@@ -170,15 +209,7 @@ def send_session_email(
 
     server = None
     try:
-        if port == 465:
-            server = smtplib.SMTP_SSL(server_host, port, timeout=25)
-        else:
-            server = smtplib.SMTP(server_host, port, timeout=25)
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-
-        server.login(user, pw)
+        server, used_port = _connect_and_login(server_host, port, user, pw, timeout=25)
         server.sendmail(user, [recipient], msg.as_string())
         return {
             "ok": True,
@@ -191,7 +222,7 @@ def send_session_email(
             "error": (
                 "SMTP Authentication failed. For Gmail accounts, please use a Google App Password "
                 "(Google Account -> Security -> 2-Step Verification -> App Passwords) "
-                "instead of your personal Gmail account password."
+                "rather than your standard Gmail account password."
             ),
         }
     except smtplib.SMTPConnectError as exc:

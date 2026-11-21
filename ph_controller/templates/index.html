@@ -126,6 +126,7 @@
     .hg-button[data-skbtn="{bksp}"]  { background: #2d1b00 !important; color: var(--color-paused,#e3b341) !important; border-bottom-color: #5c3a00 !important; }
     .hg-button[data-skbtn="{shift}"] { background: var(--bg-hover,#30363d) !important; }
     .hg-button[data-skbtn="{space}"] { flex-grow: 3 !important; }
+    .hg-button[data-skbtn="{done}"]  { background: var(--btn-run, #238636) !important; color: #fff !important; border-bottom-color: #1a6328 !important; font-weight: bold !important; flex-grow: 1.5 !important; }
 
     /* ── Modal overlay ── */
     .model-overlay { display: none; position: fixed; inset: 0; z-index: 500; background: var(--bg-overlay); align-items: center; justify-content: center; }
@@ -675,12 +676,16 @@ function initKeyboard() {
           keyboard.setOptions({ layoutName: keyboard.options.layoutName === "default" ? "shift" : "default" });
           return;
         }
+        if (btn === "{done}") {
+          hideKb();
+          return;
+        }
       },
       layout: {
-        default: ["1 2 3 4 5 6 7 8 9 0 {bksp}", "q w e r t y u i o p", "a s d f g h j k l", "{shift} z x c v b n m - _", "{space}"],
-        shift:   ["! @ # $ % & * ( ) {bksp}",   "Q W E R T Y U I O P", "A S D F G H J K L", "{shift} Z X C V B N M - _", "{space}"]
+        default: ["1 2 3 4 5 6 7 8 9 0 {bksp}", "q w e r t y u i o p", "a s d f g h j k l", "{shift} z x c v b n m @ . _ -", "{space} {done}"],
+        shift:   ["! @ # $ % & * ( ) {bksp}",   "Q W E R T Y U I O P", "A S D F G H J K L", "{shift} Z X C V B N M @ . _ -", "{space} {done}"]
       },
-      display: { "{bksp}": "⌫", "{shift}": "⇧", "{space}": "Space" },
+      display: { "{bksp}": "⌫", "{shift}": "⇧", "{space}": "Space", "{done}": "Done ✓" },
       theme: "hg-theme-default",
       preventMouseDownDefault: true
     });
@@ -984,7 +989,7 @@ function escapeHtml(str) {
         <option value="">-- Choose from preset emails --</option>
       </select>
       <input class="model-input" id="export-recipient-input" type="email" placeholder="example@gmail.com"
-             onfocus="showKb(this)"
+             onfocus="showKb(this)" onclick="showKb(this)"
              onkeydown="if(event.key==='Enter') submitExport(); if(event.key==='Escape') closeExportModal();">
     </div>
 

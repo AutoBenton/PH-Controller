@@ -19,7 +19,7 @@ DEFAULTS = {
     "email_user": "",          # sender email (e.g. example@gmail.com)
     "email_password": "",      # sender password / app password (e.g. examplePSWD)
     "smtp_server": "smtp.gmail.com",
-    "smtp_port": 587,
+    "smtp_port": 465,
     "preset_emails": [],       # dynamic list of preset recipient emails
 }
 

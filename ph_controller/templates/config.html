@@ -80,16 +80,22 @@
     /* ── On-screen keyboard ── */
     #kb-wrap {
       display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 600;
-      background: #161b22; border-top: 1px solid #30363d;
-      padding: 10px 12px 16px; box-shadow: 0 -6px 30px rgba(0,0,0,0.6);
+      background: #161b22; border-top: 2px solid #58a6ff;
+      padding: 8px 12px 14px; box-shadow: 0 -8px 32px rgba(0,0,0,0.7);
     }
     #kb-wrap.show { display: block; }
+    .kb-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #21262d; gap: 8px; }
+    .kb-label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; letter-spacing: 1px; flex-shrink: 0; }
+    .kb-value { font-size: 0.95rem; color: #58a6ff; font-family: "Courier New", monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; margin: 0 8px; }
+    .kb-done-btn { background: #238636; border: none; color: #fff; padding: 6px 16px; border-radius: 4px; font-family: inherit; font-size: 0.85rem; font-weight: bold; cursor: pointer; transition: background 0.1s; }
+    .kb-done-btn:hover { background: #2ea043; }
     .simple-keyboard.hg-theme-default { background: transparent; padding: 0; border: none; }
     .hg-button { background: #21262d !important; border-bottom: 3px solid #30363d !important; color: #e6edf3 !important; border-radius: 6px !important; box-shadow: none !important; height: 46px !important; font-family: "Courier New",monospace !important; font-size: 1rem !important; }
     .hg-button:active { background: #58a6ff !important; color: #fff !important; }
     .hg-button[data-skbtn="{bksp}"]  { background: #2d1b00 !important; color: #e3b341 !important; border-bottom-color: #5c3a00 !important; }
     .hg-button[data-skbtn="{shift}"] { background: #30363d !important; }
     .hg-button[data-skbtn="{space}"] { flex-grow: 3 !important; }
+    .hg-button[data-skbtn="{done}"]  { background: #238636 !important; color: #fff !important; border-bottom-color: #1a6328 !important; font-weight: bold !important; flex-grow: 1.5 !important; }
   </style>
 </head>
 <body>
@@ -209,13 +215,13 @@
 
       <div class="field">
         <label>Sender Email</label>
-        <input type="email" id="email_user" placeholder="example@gmail.com" autocomplete="email">
+        <input type="email" id="email_user" placeholder="example@gmail.com" autocomplete="email" onfocus="showKb(this)" onclick="showKb(this)">
       </div>
 
       <div class="field">
         <label>Sender Password / App Password</label>
         <div style="position:relative; display:flex; align-items:center;">
-          <input type="password" id="email_password" placeholder="examplePSWD" autocomplete="current-password" style="padding-right:55px;">
+          <input type="password" id="email_password" placeholder="examplePSWD" autocomplete="current-password" style="padding-right:55px;" onfocus="showKb(this)" onclick="showKb(this)">
           <button type="button" id="btn-toggle-pw" onclick="togglePasswordVisibility()" style="position:absolute; right:8px; background:transparent; border:none; color:#58a6ff; font-family:inherit; font-size:0.75rem; cursor:pointer; padding:4px;">SHOW</button>
         </div>
         <div class="field-hint">
@@ -228,11 +234,11 @@
         <div style="margin-top:8px; padding:10px; background:#0d1117; border:1px solid #21262d; border-radius:4px;">
           <div class="field" style="margin-bottom:8px;">
             <label>SMTP Host</label>
-            <input type="text" id="smtp_server" value="smtp.gmail.com" placeholder="smtp.gmail.com">
+            <input type="text" id="smtp_server" value="smtp.gmail.com" placeholder="smtp.gmail.com" onfocus="showKb(this)" onclick="showKb(this)">
           </div>
           <div class="field" style="margin-bottom:0;">
-            <label>SMTP Port</label>
-            <input type="number" id="smtp_port" value="587" min="1" max="65535">
+            <label>SMTP Port (465 = SSL, 587 = TLS)</label>
+            <input type="number" id="smtp_port" value="465" min="1" max="65535">
           </div>
         </div>
       </details>
@@ -253,8 +259,10 @@
       </div>
 
       <div style="display:flex; gap:8px;">
-        <input type="email" id="new-preset-email" placeholder="colleague@example.com" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();addPresetEmail();}">
-        <button type="button" class="btn btn-secondary" onclick="addPresetEmail()" style="min-height:42px; padding:6px 16px; white-space:nowrap;">+ Add</button>
+        <input type="email" id="new-preset-email" placeholder="colleague@example.com" style="flex:1;"
+               onfocus="showKb(this)" onclick="showKb(this)"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();addPresetEmail();}">
+        <button type="button" id="btn-add-preset" class="btn btn-secondary" onclick="addPresetEmail()" style="min-height:42px; padding:6px 16px; white-space:nowrap;">+ Add</button>
       </div>
 
       <div style="margin-top:16px;">
@@ -268,12 +276,28 @@
 <div class="toast" id="toast"></div>
 
 <!-- ── On-screen keyboard ── -->
-<div id="kb-wrap"><div class="simple-keyboard"></div></div>
+<div id="kb-wrap">
+  <div class="kb-header">
+    <span class="kb-label" id="kb-label">Type here</span>
+    <span class="kb-value" id="kb-value"></span>
+    <button type="button" class="kb-done-btn" onclick="onKbDone()">Done &#10003;</button>
+  </div>
+  <div class="simple-keyboard"></div>
+</div>
 
 <script>
 let presetEmails = [];
 let keyboard = null;
 let kbTarget = null;
+let prevBodyPad = "";
+let kbOpenedAt = 0;
+
+function onKbDone() {
+  if (kbTarget && kbTarget.id === "new-preset-email" && kbTarget.value.trim()) {
+    addPresetEmail();
+  }
+  hideKb();
+}
 
 // ── On-screen keyboard ───────────────────────────────────────────
 function initKeyboard() {
@@ -281,11 +305,19 @@ function initKeyboard() {
     const KB = typeof SimpleKeyboard === "function" ? SimpleKeyboard : SimpleKeyboard.default;
     if (!KB) return;
     keyboard = new KB({
-      onChange: (val) => { if (kbTarget) kbTarget.value = val; },
+      onChange: (val) => {
+        if (kbTarget) {
+          kbTarget.value = val;
+          const valEl = document.getElementById("kb-value");
+          if (valEl) valEl.textContent = val || "";
+        }
+      },
       onKeyPress: (btn) => {
         if (btn === "{shift}" || btn === "{lock}") {
           const cur = keyboard.options.layoutName || "default";
           keyboard.setOptions({ layoutName: cur === "default" ? "shift" : "default" });
+        } else if (btn === "{done}") {
+          onKbDone();
         }
       },
       layout: {
@@ -294,48 +326,78 @@ function initKeyboard() {
           "q w e r t y u i o p",
           "a s d f g h j k l",
           "{shift} z x c v b n m @ . _ -",
-          "{space}"
+          "{space} {done}"
         ],
         shift: [
           "! # $ % & * ( ) + = {bksp}",
           "Q W E R T Y U I O P",
           "A S D F G H J K L",
           "{shift} Z X C V B N M @ . _ -",
-          "{space}"
+          "{space} {done}"
         ]
       },
-      display: { "{bksp}": "⌫", "{shift}": "⇧", "{space}": "Space" },
+      display: { "{bksp}": "⌫", "{shift}": "⇧", "{space}": "Space", "{done}": "Done ✓" },
       theme: "hg-theme-default",
       preventMouseDownDefault: true
     });
 
     document.querySelectorAll('input[type="text"], input[type="email"], input[type="password"]').forEach(el => {
-      el.addEventListener("focus", () => showKb(el));
+      el.addEventListener("focus", (e) => { e.stopPropagation(); showKb(el); });
+      el.addEventListener("click", (e) => { e.stopPropagation(); showKb(el); });
     });
   } catch(e) { console.error("initKeyboard error:", e); }
 }
 
 function showKb(inputEl) {
-  if (!keyboard) return;
+  if (!keyboard || !inputEl) return;
+  if (window.commitNumpad) window.commitNumpad();
+
   kbTarget = inputEl;
+  kbOpenedAt = Date.now();
+
+  const lbl = inputEl.getAttribute("placeholder") || inputEl.id || "Editing";
+  const labelEl = document.getElementById("kb-label");
+  const valEl = document.getElementById("kb-value");
+  if (labelEl) labelEl.textContent = lbl;
+  if (valEl) valEl.textContent = inputEl.value || "";
+
   keyboard.setInput(inputEl.value || "");
   keyboard.setOptions({ layoutName: "default" });
-  document.getElementById("kb-wrap").classList.add("show");
+
+  const wrapEl = document.getElementById("kb-wrap");
+  wrapEl.classList.add("show");
+
+  prevBodyPad = document.body.style.paddingBottom;
+  document.body.style.paddingBottom = (wrapEl.offsetHeight || 300) + 40 + "px";
+
+  setTimeout(() => {
+    if (inputEl.scrollIntoView) {
+      inputEl.scrollIntoView({ block: "start" });
+      window.scrollBy(0, -20);
+    }
+  }, 60);
 }
 
 function hideKb() {
   if (!keyboard) return;
-  document.getElementById("kb-wrap").classList.remove("show");
+  const wrapEl = document.getElementById("kb-wrap");
+  if (wrapEl) wrapEl.classList.remove("show");
+  document.body.style.paddingBottom = prevBodyPad;
   kbTarget = null;
 }
 
 document.addEventListener("click", (e) => {
-  if (!e.target.closest("#kb-wrap") &&
-      !e.target.matches('input[type="text"], input[type="email"], input[type="password"]') &&
-      !e.target.closest(".btn-del-email") &&
-      !e.target.closest("#btn-toggle-pw")) {
-    hideKb();
-  }
+  if (!kbTarget) return;
+  // Ignore clicks that fire right as the keyboard opens (prevents flash-and-close on touchscreen taps)
+  if (Date.now() - kbOpenedAt < 500) return;
+
+  const wrapEl = document.getElementById("kb-wrap");
+  if (wrapEl && wrapEl.contains(e.target)) return;
+  if (e.target === kbTarget || (kbTarget.contains && kbTarget.contains(e.target))) return;
+  if (e.target.matches && e.target.matches('input[type="text"], input[type="email"], input[type="password"]')) return;
+  if (e.target.closest && (e.target.closest(".btn-del-email") || e.target.closest("#btn-toggle-pw") || e.target.closest("#btn-add-preset"))) return;
+
+  hideKb();
 });
 
 // ── Password Visibility ──────────────────────────────────────────
@@ -400,7 +462,7 @@ async function testEmailConnection() {
   const email_user = (document.getElementById("email_user").value || "").trim();
   const email_password = document.getElementById("email_password").value;
   const smtp_server = (document.getElementById("smtp_server").value || "").trim() || "smtp.gmail.com";
-  const smtp_port = parseInt(document.getElementById("smtp_port").value, 10) || 587;
+  const smtp_port = parseInt(document.getElementById("smtp_port").value, 10) || 465;
 
   if (!email_user) {
     toast("Please enter a sender email address first", true);
@@ -489,7 +551,7 @@ async function saveConfig() {
   if (srvEl) data.smtp_server = srvEl.value.trim() || "smtp.gmail.com";
 
   const portEl = document.getElementById("smtp_port");
-  if (portEl) data.smtp_port = parseInt(portEl.value, 10) || 587;
+  if (portEl) data.smtp_port = parseInt(portEl.value, 10) || 465;
 
   data.preset_emails = presetEmails;
 
